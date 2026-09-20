@@ -97,7 +97,11 @@ mini-flow/
 ├── package.json / tsconfig.json
 ├── schema.sql                # D1 Schema（含恢复扩展表 + DLQ + 索引）
 ├── DECISIONS.md              # 已确认决策记录
-├── scripts/gen-nodes-json.ts # 生成 nodes.json / node-versions.json（节点元数据前端同步）
+├── migrations/               # 增量迁移 SQL（仅对已建库执行；新库直接用 schema.sql）
+├── scripts/
+│   ├── gen-nodes-json.ts     # 生成 nodes.json / node-versions.json（节点元数据前端同步）
+│   └── run-tests.mjs         # 测试入口（node:test + tsx）
+├── tests/                    # 单元 / 集成测试（helpers 内含真实 SQLite 支撑的 D1 垫片）
 ├── frontend/dist/            # n8n editor-ui 构建产物（复用，接入说明见 frontend/README.md）
 └── src/
     ├── index.ts              # Hono 装配 + Push 挂载 + SPA fallback + cron 入口
@@ -110,6 +114,7 @@ mini-flow/
     │   ├── lock.ts           # 乐观锁 + 超时清理
     │   ├── dead-letter.ts    # DLQ 写入 / 扫描 / 重建
     │   ├── dag.ts            # n8n workflow JSON → 步骤序列（含条件分支）
+    │   ├── route.ts          # 纯函数执行内核：拓扑序 / 分支路由 / 断点续跑
     │   ├── scheduler.ts      # 已激活定时工作流调度
     │   └── executor.ts       # 业务调度入口：锁 → 检查点 → 提交 Workflows
     ├── runtime/
@@ -134,6 +139,10 @@ mini-flow/
         ├── workflows.ts      # workflows CRUD + run
         ├── executions.ts     # executions 列表 / 详情 / 重试
         ├── templates.ts / templates-presets.ts  # 模板市场代理 + 预设
+        ├── webhook.ts        # 外部触发：/webhook · /webhook-test · /form 匹配与回包
+        ├── insights.ts       # /rest/insights/* 执行统计聚合
+        ├── tags.ts           # /rest/tags CRUD
+        ├── community-nodes.ts# 社区节点安装 / 卸载登记
         ├── dead-letter.ts    # DLQ 管理端点
         ├── console.ts        # 管理后台页
         └── push.ts           # 与 runtime/push 对接，订阅执行事件
@@ -163,8 +172,9 @@ npx wrangler d1 create mini-flow-db            # 把 database_id 填进 wrangler
 npx wrangler d1 execute mini-flow-db --file=schema.sql
 # 2) 本地
 npm run dev
-# 3) 类型检查
+# 3) 类型检查 + 测试
 npm run type-check
+npm test
 # 4) 同步节点元数据到前端（已在 predeploy 自动执行）
 npm run gen:nodes
 # 5) 部署
@@ -223,3 +233,9 @@ flowchart LR
 - [x] 韧性四机制（检查点 / 幂等重试 / DLQ / 防重叠锁） + Workflows 断点续跑
 - [x] Push SSE 门面（Durable Object）
 - [x] Telegram 抓取 → 翻译 → 企业微信推送闭环
+- [x] 鉴权加固：HMAC 签名会话令牌 + `/rest/*` 全局鉴权墙 + 凭据出站脱敏
+- [x] 执行引擎语义对齐：仅执行已连线节点 / IF 分支互斥 / 节点失败显式上报
+- [x] 外部触发落地：`/webhook/:path` · `/webhook-test/:path` · `/form/:path`（含 responseMode 三态回包）
+- [x] 节点可配置化：68/68 节点 `properties` 非空 + 11 节点 `credentials` 声明
+- [x] REST 能力端点补齐：executions retry / insights / tags CRUD / 工作流导入导出 / 社区节点登记
+- [x] 回归测试体系：`npm test` 111 例（含反向验证探针，可捕获注入缺陷）

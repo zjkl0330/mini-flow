@@ -243,3 +243,107 @@ node --import tsx --test tests/unit/node-param-alignment.test.ts
 - 新增测试：`tests/integration/app-wiring.test.ts`、`webhook-boundary.test.ts`、`rest-boundary.test.ts`、`schema-migration.test.ts`；`tests/unit/node-param-alignment.test.ts`；`tests/helpers/cf-loader.mjs`、`cf-workers-stub.mjs`。
 - **未改动任何 `src/` 业务代码**；反向验证注入**已全部还原**，`git diff --stat` 为空（工作树对已跟踪文件干净）。
 - 辅助脚本（不计入测试）：`.workbuddy/tmp/repro-params.ts`、`repro-params2.ts`、`qa-webhook-e2e.mjs`、`qa-rest-probe.mjs`。
+
+---
+
+# 第 2 轮回归验证（对 Engineer 修复 `f4f7fb1` 的独立复核）
+
+- **被验提交**: `f4f7fb1`（fix(params): 修复节点参数与执行器读取键错配…并收口死控件），分支 `iter/2026-09-20`
+- **验证原则**: 「证明它真的修好了」——用**独立复现脚本**直接驱动执行器，不依赖「套件转绿」自证
+- **门禁**: `node scripts/run-tests.mjs` → **111/111 全绿**；`tsc --noEmit` → **零错误**；工作树对已跟踪文件干净
+
+> **第 2 轮最终结论**：修复**真实且完整**，无回归，无「为迁就实现而放宽断言」。**最终路由判定 = NoOne（全部通过）**。
+
+## R2.1 五个缺陷的独立复现（不走测试套件，直接驱动执行器）
+
+脚本：`.workbuddy/tmp/round2-repro.ts` → **52/52 全 PASS**。
+
+| 缺陷 | 复现输入 | 修复前 | 修复后实测 | 判定 |
+| --- | --- | --- | --- | --- |
+| **DEF-1** renameKeys | `{renaming:{renaming:[…]}}`(fixedCollection) | 抛 `TypeError: renames is not iterable` | 正常改名、不抛错 | ✅ |
+| DEF-1 | `{renaming:[…]}`(旧形态) | 正常 | 正常（兼容保留） | ✅ |
+| DEF-1 | `{renameKeys:[…]}`(旧形态) | 正常 | 正常（兼容保留） | ✅ |
+| DEF-1 | 畸形 `renaming:'abc'` / `null` / `123` | —— | **不崩溃，安全降级（原样透传）** | ✅ |
+| **DEF-2** aggregate.fields | json 字符串 `'[{field,aggregation}]'` | 输出 `[{}]` | `sum=30` 生效 | ✅ |
+| DEF-2 | 已解析数组 | 生效 | 仍生效（**无回归**） | ✅ |
+| DEF-2 | 非法 JSON `'{oops'` | —— | 不崩溃（安全降级） | ✅ |
+| **DEF-3** editFields.fields | json 字符串 | 字段未写入 | `x=1` 生效 | ✅ |
+| DEF-3 | 已解析数组 / 非法 JSON | —— | 仍生效 / 不崩溃 | ✅ |
+| **DEF-4** assign.assignments | json 字符串 | 未赋值 | `y=9` 生效 | ✅ |
+| DEF-4 | 已解析数组 / 非法 JSON | —— | 仍生效 / 不崩溃 | ✅ |
+| **DEF-5** dateTime.additionalFields.add | json 字符串 `'{"value":1,"unit":"days"}'` | 未加 1 天 | `2020-01-01 → 2020-01-02` 生效 | ✅ |
+| DEF-5 | 已解析对象 / 非法 JSON | —— | 仍生效 / 不崩溃 | ✅ |
+| DEF-5(防御) | `additionalFields` 整体为字符串 | —— | 也可解析（+2 天） | ✅ |
+
+**结论：5 个缺陷全部真实修复；已解析形态无回归；非法/畸形输入一律安全降级（不抛错、不 500）。**
+
+## R2.2 新增工具函数边界审计（`src/nodes/common.ts` 的 `asJsonArray` / `asJsonRecord`）
+
+| 输入 | `asJsonArray` 期望 | 实测 | `asJsonRecord` 期望 | 实测 |
+| --- | --- | --- | --- | --- |
+| `[1,2]` / `{a:1}` | 原样 | ✅ | 原样 | ✅ |
+| `'[1,2]'` / `'{"a":1}'` | 解析 | ✅ | 解析 | ✅ |
+| `''` / `'   '` | `null` | ✅ | `null` | ✅ |
+| `'{oops'`（非法） | `null` | ✅ | `null` | ✅ |
+| `null` / `undefined` | `null` | ✅ | `null` | ✅ |
+| 标量 `'1'` / `'"s"'` / `'true'` / `'null'` | `null`（非数组） | ✅ | `null`（非对象） | ✅ |
+| `'{"a":1}'` 传给 array / `'[1,2]'` 传给 record | 类型不匹配 → `null` | ✅ | 类型不匹配 → `null` | ✅ |
+| 数字/普通对象/嵌套数组 `'[[1],[2]]'` | 非目标形态 `null` / 数组原样 | ✅ | `null` / 非对象 `null` | ✅ |
+
+**语义符合预期：目标形态原样返回；字符串尝试解析；非法/空/标量/类型不匹配一律 `null`。** 无越界、无抛错。
+
+## R2.3 三个死控件收口后的**行为回归**（重点）
+
+- **L-1 `set.keepOnlySet`** ✅
+  - `keepOnlySet:true` → 输出**仅含本节点写入字段**（丢弃上游 `a`、`x`）。
+  - **默认（未设）与 `false` 行为完全一致，且等于修复前**（`{...输入, 写入}` 合并）——已用「复刻修复前合并逻辑」逐字段比对，**无回归**。
+- **L-2 `respondWith`** ✅
+  - 实机（8787）造 `responseMode='responseNode'` + `respondWith:'text'`（`webhook→Set(text="你好世界-hello")→respondToWebhook`）激活流：`POST /webhook/<path>` → **200、`Content-Type: text/plain; charset=utf-8`、体 = `你好世界-hello`（纯文本，非 JSON 包裹）**。
+  - 对照 `respondWith` 缺省（json）流：→ **201（取 `responseCode`）、`Content-Type: application/json`**，回包体为节点输出 —— **与修复前一致，无回归**。
+  - 单测层：`text` 模式返回 `{text: 首个输入项.text}`；默认/`json` 模式原样透传（与修复前逐字节相等）。
+- **L-3 `DELETE /rest/tags/:id`** ✅
+  - 不存在 id → **404**（与 `community-nodes/:name/uninstall` 语义统一）；存在 id → **200 `{data:true}`**。集成测试 + 实机双证据一致。
+
+## R2.4 关于「工程师改了 1 条断言」的独立结论
+
+变更：`tests/integration/rest-boundary.test.ts` 中，我方原用例把 `DELETE /rest/tags/<不存在>` **按现状锁定为 200**（并在注释中标注「与 community uninstall 的 404 语义不一致」）；工程师将其改为 **404**，并**新增**「删除存在的 id → 200」正例。
+
+**判定：不构成「为迁就实现而放宽断言」，语义正确，属于合理的契约收紧（而非掩盖）。** 依据：
+
+1. **与 n8n 原生行为一致**：n8n 的 `DELETE /rest/tags/:id` 对不存在的 tag 返回 **404（Tag not found）**；改断言为 404 是**向 n8n 契约对齐**，不是向 bug 妥协。
+2. **实现同步修复**：`src/n8n/tags.ts` 确实新增了存在性校验（`SELECT id FROM tags WHERE id=?` → 无则 404）——**断言与实现同向收紧**。若只是「改断言、不修实现」，才叫掩盖；本例实现已改，测试描述的是新契约。
+3. **我方原用例本就是「记录实际行为」而非「声明期望」**（原注释明写「记录实际行为」）。把「记录」升级为「声明目标契约」并同步统一语义，方向正确。
+4. **新正例成立**：`DELETE 存在 id → 200 {data:true}` 实测通过，覆盖了收口后「存在即删」的正常路径，未被削弱。
+5. 该变更由 team-lead 的「统一到 404」指令驱动，属产品决策，非测试自降标准。
+
+> 补充：我方第 1 轮判定的缺陷从未被通过「改断言」掩盖——5 个 DEFECT 用例（A1–A5）在 `f4f7fb1` 中**保持原样未动**，靠修复实现转绿（见 R2.1），这正是「不迁就实现」的正确姿势。
+
+## R2.5 第 2 轮反向验证（2 项注入，均已完整还原）
+
+| 编号 | 注入 | 结果 | 还原 |
+| --- | --- | --- | --- |
+| **INJ-R2-1** | `src/nodes/util.ts` renameKeys 读键**回退**为 `p.renaming`（对象当数组迭代） | `node-param-alignment.test.ts` → **9/10，`[DEFECT-A5]` 转红** ✅ 捕获 | ✅ `git status` 干净 |
+| **INJ-R2-2** | `src/nodes/common.ts` 的 `asJsonArray` 改为**恒返回入参（不解析）** | `node-param-alignment.test.ts` → **7/10，`[DEFECT-A1/A2/A3]` 转红** ✅ 捕获（A4 用 `asJsonRecord`、A5 内层已是数组，故不受影响，符合预期） | ✅ `git status` 干净 |
+
+**两项注入均被新补齐的用例有效捕获，无「无效用例」。**
+
+## R2.6 门禁与工作树
+
+- `node scripts/run-tests.mjs` → **111 tests / 111 pass / 0 fail**。
+- `tsc --noEmit` → **零错误**。
+- 反向验证两项注入**全部还原**，`git diff --stat` 为空；`git status` 对源码/测试干净。
+- 本轮唯一的工作树改动 = 本报告文件（`03-qa-report.md`）的**追加**（R2 章节），按要求保留。
+- 未提交、未切分支、未推 main。
+
+## R2.7 最终路由判定
+
+### 判定：**NoOne（全部通过）**
+
+- 5 个缺陷（DEF-1~5）与 3 个死控件收口（OBS-1~3）经**独立复现**确认修复有效，无回归、无新缺陷。
+- 反向验证 2/2 项被新用例捕获。
+- 门禁全绿（111/111、tsc 0）。
+- 工程师对 `rest-boundary.test.ts` 的断言变更经复核为**合理收紧**，非掩盖。
+
+**建议**：可进入阶段 5 交付汇总。
+
+> 本轮新增脚本（不计入测试）：`.workbuddy/tmp/round2-repro.ts`、`qa-respondwith-e2e.mjs`。
