@@ -158,6 +158,13 @@ async function checkLogin(creds: ResolvedCredentials, email: unknown, password: 
   return constantTimeEqual(creds.password, password);
 }
 
+// 登录请求体：兼容两种登录标识键名（见下方 POST /login 的说明）。
+interface LoginBody {
+  email?: string;
+  emailOrLdapLoginId?: string;
+  password?: string;
+}
+
 export const authRoutes = new Hono<{ Bindings: Env }>()
   // 首次 setup（可选）：n8n 首启初始化 owner；本单用户实现直接返回现有 owner。
   .post('/owner/setup', async (c) => {
@@ -175,8 +182,13 @@ export const authRoutes = new Hono<{ Bindings: Env }>()
     if (!creds) {
       return c.json({ code: 503, message: NOT_CONFIGURED_MESSAGE, data: undefined }, 503);
     }
-    const body = await c.req.json<{ email?: string; password?: string }>().catch(() => ({} as { email?: string; password?: string }));
-    if (!(await checkLogin(creds, body?.email, body?.password))) {
+    const body = await c.req.json<LoginBody>().catch(() => ({} as LoginBody));
+    // 登录标识键：n8n 前端历史上有过 email / emailOrLdapLoginId 两种字段名
+    // （新版登录表单为支持 LDAP 登录名，固定提交 emailOrLdapLoginId）。
+    // 必须同时兼容，否则「界面登录」会被后端 401 拒绝——而用 email 手工调 API 却成功，
+    // 属于典型的「API 通了但产品不可用」契约错配。
+    const identifier = body?.emailOrLdapLoginId ?? body?.email;
+    if (!(await checkLogin(creds, identifier, body?.password))) {
       return c.json({ code: 401, message: 'Invalid email or password', data: undefined }, 401);
     }
     if (creds.usingFallback) {

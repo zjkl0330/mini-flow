@@ -117,6 +117,51 @@ export const executionRoutes = new Hono<{ Bindings: Env }>()
     const logs = await c.env.DB.prepare('SELECT node_name, node_type, status, retry_attempt, error_message, output_data, started_at, finished_at FROM node_executions WHERE execution_id=?').bind(id).all().catch(() => ({ results: [] }));
     return c.json({ data: { row, nodeLogs: logs.results } });
   })
+  // ---- 补齐：批量操作 / 标注 / 版本筛选（此前均 404） ----
+  // POST /rest/executions/delete —— 批量删除（列表页多选删除）
+  .post('/delete', async (c) => {
+    const body = await c.req.json<{ ids?: unknown }>().catch(() => ({ ids: [] as unknown }));
+    const ids = Array.isArray(body?.ids) ? body.ids.map(String).filter(Boolean) : [];
+    if (ids.length === 0) return c.json({ data: { deleted: [] } });
+    let deleted: string[] = [];
+    for (const id of ids.slice(0, 500)) {
+      const r = await withRetry(() => c.env.DB.prepare('SELECT id FROM executions WHERE id=?').bind(id).first<{ id: string }>());
+      if (!r) continue;
+      await withRetry(() => c.env.DB.prepare('DELETE FROM node_executions WHERE execution_id=?').bind(id).run());
+      await withRetry(() => c.env.DB.prepare('DELETE FROM executions WHERE id=?').bind(id).run());
+      deleted.push(id);
+    }
+    return c.json({ data: { deleted } });
+  })
+  // POST /rest/executions/stopMany —— 批量停止
+  .post('/stopMany', async (c) => {
+    const body = await c.req.json<{ ids?: unknown }>().catch(() => ({ ids: [] as unknown }));
+    const ids = Array.isArray(body?.ids) ? body.ids.map(String).filter(Boolean) : [];
+    const stopped: string[] = [];
+    for (const id of ids.slice(0, 500)) {
+      const r = await withRetry(() => c.env.DB.prepare('SELECT id,status FROM executions WHERE id=?').bind(id).first<ExecutionRow>());
+      if (!r || (r.status !== 'running' && r.status !== 'pending')) continue;
+      await withRetry(() => c.env.DB.prepare(
+        "UPDATE executions SET status='cancelled', finished_at=datetime('now'), error_message=? WHERE id=?",
+      ).bind('Execution stopped by user', id).run());
+      stopped.push(id);
+    }
+    return c.json({ data: { stopped } });
+  })
+  // GET /rest/executions/versions/:workflowId —— ExecutionsTime 的「版本筛选」下拉数据源。
+  // 前端把返回**数组**直接赋给列表并读取 { versionId, name, createdAt }；必须注册在 /:id 之前。
+  .get('/versions/:workflowId', async (c) => {
+    const wfId = c.req.param('workflowId');
+    try {
+      const wf = await withRetry(() => c.env.DB.prepare('SELECT id, updated_at, created_at FROM workflows WHERE id=?')
+        .bind(wfId).first<{ id: string; updated_at: string; created_at: string }>());
+      if (!wf) return c.json({ data: [] });
+      // 本移植版不保留历史版本快照，执行始终归属工作流当前版本（versionId === workflow id）。
+      return c.json({ data: [{
+        versionId: wf.id, name: null, createdAt: wf.updated_at ?? wf.created_at,
+      }] });
+    } catch { return c.json({ data: [] }); }
+  })
   // POST /rest/executions/:id/stop —— 停止运行中的执行（前端 Execute 界面 Stop 按钮）
   .post('/:id/stop', async (c) => {
     const id = c.req.param('id');
@@ -240,6 +285,24 @@ export const executionRoutes = new Hono<{ Bindings: Env }>()
     }));
 
     return c.json({ data: { count: total, finished, running: total - finished, results: data } });
+  })
+  // PATCH /rest/executions/:id —— 执行标注（标签 / 赞踩）。前端在执行列表与详情页写入。
+  // 存储：KV（`exec-annotation:<id>`），避免仅为注解新增表列与迁移。
+  .patch('/:id', async (c) => {
+    const id = c.req.param('id');
+    const r = await withRetry(() => c.env.DB.prepare('SELECT id FROM executions WHERE id=?').bind(id).first<{ id: string }>());
+    if (!r) return c.json({ code: 404, message: 'Execution not found', data: undefined }, 404);
+    const body = await c.req.json<{ annotation?: { tags?: unknown; vote?: unknown }; tags?: unknown; vote?: unknown }>()
+      .catch(() => ({} as { annotation?: { tags?: unknown; vote?: unknown }; tags?: unknown; vote?: unknown }));
+    const src = body?.annotation ?? body ?? {};
+    const annotation = {
+      tags: Array.isArray((src as { tags?: unknown }).tags)
+        ? ((src as { tags: unknown[] }).tags).map(String).slice(0, 20)
+        : [],
+      vote: typeof (src as { vote?: unknown }).vote === 'string' ? String((src as { vote: string }).vote) : undefined,
+    };
+    await c.env.CREDENTIALS?.put(`exec-annotation:${id}`, JSON.stringify(annotation)).catch(() => undefined);
+    return c.json({ data: { id, annotation } });
   })
   // GET /rest/executions/:id —— 详情（含 workflowData + resultData.runData）
   .get('/:id', async (c) => {

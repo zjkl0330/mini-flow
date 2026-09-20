@@ -44,6 +44,43 @@ export const userListRoutes = new Hono<{ Bindings: Env }>()
     const me = owner();
     return c.json({ data: { count: 1, items: [{ ...me, role: 'owner' }] } });
   })
+  // GET /rest/users/:id/password-reset-link —— 单用户实例无邮件通道，返回空链接而非 404。
+  .get('/:id/password-reset-link', async (c) => {
+    if (!(await isAuthed(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    return c.json({ data: { link: '' } });
+  })
+  // POST /rest/users/:id/invite-link —— 同上：单用户实例没有可邀请的成员。
+  .post('/:id/invite-link', async (c) => {
+    if (!(await isAuthed(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    return c.json({ data: { link: '' } });
+  })
+  // PATCH /rest/users/:id/role —— 实例 owner 角色不可变更，显式拒绝。
+  .patch('/:id/role', async (c) => {
+    if (!(await isAuthed(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    return c.json({
+      code: 400,
+      message: 'The instance owner role cannot be changed on a single-user instance.',
+      data: undefined,
+    }, 400);
+  })
+  // PATCH /rest/users/:id/settings —— 更新本人偏好（转发到用户设置存储）。
+  .patch('/:id/settings', async (c) => {
+    if (!(await isAuthed(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    const body = await c.req.json<Record<string, unknown>>().catch(() => ({}));
+    const cur = await getStoredSettings(c.env);
+    const merged = { ...cur, ...(body ?? {}) };
+    await (c.env.CREDENTIALS?.put(SETTINGS_KEY, JSON.stringify(merged))).catch(() => undefined);
+    return c.json({ data: { ...owner(), settings: merged } });
+  })
+  // DELETE /rest/users/:id —— 唯一 owner 不可删除，显式拒绝。
+  .delete('/:id', async (c) => {
+    if (!(await isAuthed(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    return c.json({
+      code: 400,
+      message: 'The instance owner cannot be deleted.',
+      data: undefined,
+    }, 400);
+  })
   .get('/:id', async (c) => {
     if (!(await isAuthed(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
     const me = owner();
@@ -144,4 +181,27 @@ export const settingsRoutes = new Hono<{ Bindings: Env }>()
   })
   .get('/sso', (c) => c.json({ data: { configured: false }, action: 'GET' }))
   .get('/license', (c) => c.json({ data: { active: true, planName: 'mini-flow' } }))
+  // GET /rest/settings/security —— 「个人 > 安全」页数据源。
+  // 字段名严格对齐 SecuritySettings.vue 的读取键（实测自前端 dist）。
+  .get('/security', async (c) => {
+    if (!(await isAuthed(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    return c.json({ data: {
+      personalSpacePublishing: true,
+      personalSpaceSharing: true,
+      publishedPersonalWorkflowsCount: 0,
+      sharedPersonalWorkflowsCount: 0,
+      sharedPersonalCredentialsCount: 0,
+    } });
+  })
+  .post('/security', async (c) => {
+    if (!(await isAuthed(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    const body = await c.req.json<Record<string, unknown>>().catch(() => ({} as Record<string, unknown>));
+    return c.json({ data: {
+      personalSpacePublishing: body?.personalSpacePublishing !== false,
+      personalSpaceSharing: body?.personalSpaceSharing !== false,
+      publishedPersonalWorkflowsCount: 0,
+      sharedPersonalWorkflowsCount: 0,
+      sharedPersonalCredentialsCount: 0,
+    } });
+  })
   .get('/logo', (c) => c.json({ data: { logo: null } }));

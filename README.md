@@ -143,6 +143,8 @@ mini-flow/
         ├── insights.ts       # /rest/insights/* 执行统计聚合
         ├── tags.ts           # /rest/tags CRUD
         ├── community-nodes.ts# 社区节点安装 / 卸载登记
+        ├── rest-extensions.ts# 端点补齐：license / workflow-history / options / 版本历史，
+        │                     #   以及**显式降级层**（企业/AI 端点返回「未启用」而非 404）
         ├── dead-letter.ts    # DLQ 管理端点
         ├── console.ts        # 管理后台页
         └── push.ts           # 与 runtime/push 对接，订阅执行事件
@@ -263,7 +265,10 @@ flowchart LR
 - [x] 外部触发落地：`/webhook/:path` · `/webhook-test/:path` · `/form/:path`（含 responseMode 三态回包）
 - [x] 节点可配置化：68/68 节点 `properties` 非空 + 11 节点 `credentials` 声明
 - [x] REST 能力端点补齐：executions retry / insights / tags CRUD / 工作流导入导出 / 社区节点登记
-- [x] 回归测试体系：`npm test` 129 例（含反向验证探针，可捕获注入缺陷）
+- [x] 回归测试体系：`npm test` 143 例（含反向验证探针，可捕获注入缺陷）
+- [x] **前端所需后端零缺口**：对前端 dist 抽出的 274 条 `/rest/*` 调用做**端点级实机探测 +
+      真实浏览器页面遍历**，修复前 185 条「端点缺失」型 404 → 修复后 **0 条**；
+      未实现的企业/AI 能力统一返回「未启用」契约形状（`src/n8n/rest-extensions.ts`）
 - [x] 凭据守卫：`ADMIN_PASSWORD` / `SESSION_SECRET` 未配置时**失败关闭**（登录 503、受保护路由 401），
       开发回退口令仅在 `ENVIRONMENT=development|dev|local` 生效（判定不看请求 Host，防伪造绕过）
 - [x] 外部触发确定性：同名 webhook/form path 按 `created_at, rowid` 稳定选取最早创建者

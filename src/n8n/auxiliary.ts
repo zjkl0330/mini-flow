@@ -4,11 +4,77 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { isAuthed } from './auth';
 
+// 内置角色定义：此前 /rest/roles 恒返回空数组 → 「成员/角色」页显示无角色、
+// 角色选择器为空。补齐 n8n 内置的全局角色与项目角色（含 scopes），
+// 自定义角色创建仍属企业能力，写入接口显式拒绝。
+const BUILTIN_ROLES = [
+  {
+    slug: 'owner', displayName: 'Owner', description: 'Owns the instance and can do everything.',
+    roleType: 'global', systemRole: true, licensed: true, scopes: ['global:owner'],
+  },
+  {
+    slug: 'admin', displayName: 'Admin', description: 'Can manage users, projects and credentials.',
+    roleType: 'global', systemRole: true, licensed: true,
+    scopes: ['user:read', 'user:update', 'user:list', 'user:invite',
+      'workflow:create', 'workflow:read', 'workflow:update', 'workflow:delete', 'workflow:list', 'workflow:execute',
+      'credential:create', 'credential:read', 'credential:update', 'credential:delete', 'credential:list',
+      'project:create', 'project:read', 'project:update', 'project:delete', 'project:list'],
+  },
+  {
+    slug: 'member', displayName: 'Member', description: 'Can build and run their own workflows and credentials.',
+    roleType: 'global', systemRole: true, licensed: true,
+    scopes: ['workflow:create', 'workflow:read', 'workflow:update', 'workflow:list', 'workflow:execute',
+      'credential:create', 'credential:read', 'credential:update', 'credential:list', 'project:read', 'project:list'],
+  },
+  {
+    slug: 'project:admin', displayName: 'Project Admin', description: 'Can manage a project and its resources.',
+    roleType: 'project', systemRole: true, licensed: true,
+    scopes: ['project:read', 'project:update', 'workflow:create', 'workflow:read', 'workflow:update', 'workflow:delete',
+      'credential:create', 'credential:read', 'credential:update', 'credential:delete', 'folder:create', 'folder:read', 'folder:update', 'folder:delete'],
+  },
+  {
+    slug: 'project:editor', displayName: 'Project Editor', description: 'Can edit the resources of a project.',
+    roleType: 'project', systemRole: true, licensed: true,
+    scopes: ['project:read', 'workflow:create', 'workflow:read', 'workflow:update', 'credential:create', 'credential:read', 'credential:update', 'folder:read'],
+  },
+  {
+    slug: 'project:viewer', displayName: 'Project Viewer', description: 'Can view the resources of a project.',
+    roleType: 'project', systemRole: true, licensed: true,
+    scopes: ['project:read', 'workflow:read', 'credential:read', 'folder:read'],
+  },
+];
+
+// 实例唯一 owner 的使用计数（前端 withUsageCount=true 时读取）。
+const usageOf = (slug: string) => (slug === 'owner' ? { usedByUsers: 1, usedByWorkflows: 0, usedByCredentials: 0 } : {});
+
 export const rolesRoutes = new Hono<{ Bindings: Env }>()
   // GET /rest/roles?withUsageCount=true → { data: { roles, count } }
-  .get('/', (c) => c.json({ data: { roles: [], count: 0 } }))
+  .get('/', (c) => c.json({ data: {
+    roles: BUILTIN_ROLES.map((r) => ({ ...r, ...usageOf(r.slug) })),
+    count: BUILTIN_ROLES.length,
+  } }))
+  // POST /rest/roles —— 自定义角色属企业能力，显式拒绝（而非 404）。
+  .post('/', (c) => c.json({
+    code: 400,
+    message: 'Custom roles are not available in this deployment; built-in roles are listed at GET /rest/roles.',
+    data: undefined,
+  }, 400))
+  // GET /rest/roles/:slug/assignments —— 角色分配概览
+  .get('/:slug/assignments', (c) => c.json({ data: { assignments: [], count: 0 } }))
+  // GET /rest/roles/:slug/assignments/:id/members —— 单个分配下的成员
+  .get('/:slug/assignments/:id/members', (c) => c.json({ data: { members: [], count: 0 } }))
   // GET /rest/roles/:slug?withUsageCount=true
-  .get('/:slug', (c) => c.json({ data: null, code: 404, message: 'Role not found' }, 404));
+  .get('/:slug', (c) => {
+    const role = BUILTIN_ROLES.find((r) => r.slug === c.req.param('slug'));
+    if (!role) return c.json({ code: 404, message: 'Role not found', data: undefined }, 404);
+    return c.json({ data: { ...role, ...usageOf(role.slug) } });
+  })
+  .patch('/:slug', (c) => c.json({
+    code: 400, message: 'Built-in roles cannot be modified.', data: undefined,
+  }, 400))
+  .delete('/:slug', (c) => c.json({
+    code: 400, message: 'Built-in roles cannot be deleted.', data: undefined,
+  }, 400));
 
 export const variablesRoutes = new Hono<{ Bindings: Env }>()
   // GET /rest/variables → 前端 users.store 直接对 data 调 .filter()，必须是数组

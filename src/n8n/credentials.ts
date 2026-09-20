@@ -143,6 +143,55 @@ export const credentialRoutes = new Hono<{ Bindings: Env }>()
     return c.json({ data: (await listCreds(c.env)).filter((x) => x.projectId === null || x.projectId === projectId).map(toResponse) });
   })
   .get('/types', async (c) => { if (!(await auth(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401); return c.json({ data: credentialTypes() }); })
+  // GET /rest/credentials/new —— 新建凭据的空白脚手架。
+  // 必须注册在 /:id 之前：否则被 /:id 捕获成 "Credential not found new"（实机复现过）。
+  .get('/new', async (c) => {
+    if (!(await auth(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    const type = c.req.query('type') ?? '';
+    const projectId = c.req.query('projectId') ?? 'personal';
+    // schema 与类型信息随行返回，前端「新建凭据」表单无需再发一次请求。
+    const def = credentialTypes().find((t) => t.name === type) ?? null;
+    return c.json({ data: {
+      id: null, name: '', type, data: {}, projectId,
+      schema: def?.properties ?? [], credentialType: def,
+    } });
+  })
+  // PUT /rest/credentials/:id/share —— 单用户实例没有可分享的接收方；幂等返回当前状态，
+  // 让「分享」弹窗正常关闭，而不是弹 404。
+  .put('/:id/share', async (c) => {
+    if (!(await auth(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    const cred = (await listCreds(c.env)).find((x) => x.id === c.req.param('id'));
+    if (!cred) return c.json({ code: 404, message: 'Credential not found', data: undefined }, 404);
+    return c.json({ data: { ...toResponse(cred), sharedWithProjects: [] } });
+  })
+  // PUT /rest/credentials/:id/transfer —— 转移所有权：单用户实例不可转移，显式拒绝。
+  .put('/:id/transfer', async (c) => {
+    if (!(await auth(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    return c.json({
+      code: 400,
+      message: 'Credential ownership cannot be transferred on a single-user instance.',
+      data: undefined,
+    }, 400);
+  })
+  // POST /rest/credentials/:id/authorize —— OAuth 授权入口。本移植版凭据均为静态
+  // 密钥（无 OAuth 流程），显式返回「不支持」，避免前端跳进死循环。
+  .post('/:id/authorize', async (c) => {
+    if (!(await auth(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    return c.json({
+      code: 400,
+      message: 'OAuth authorization is not supported in this deployment; credentials use static keys.',
+      data: undefined,
+    }, 400);
+  })
+  // DELETE /rest/credentials/:id/revoke —— 配套的撤销入口，同样显式不支持。
+  .delete('/:id/revoke', async (c) => {
+    if (!(await auth(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    return c.json({
+      code: 400,
+      message: 'OAuth revocation is not supported in this deployment; credentials use static keys.',
+      data: undefined,
+    }, 400);
+  })
   // 单个凭据
   .get('/:id', async (c) => {
     if (!(await auth(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);

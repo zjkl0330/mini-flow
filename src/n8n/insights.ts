@@ -93,6 +93,25 @@ export const insightsRoutes = new Hono<{ Bindings: Env }>()
     }));
     return c.json({ data });
   })
+  // GET /rest/insights/by-time/time-saved —— 洞察页「节省时间」卡片。
+  // 本移植版不采集人工耗时基线，采用**显式声明的估算口径**：
+  // 每次成功执行按 1 分钟人工成本折算，并在响应中回传估算参数，避免把估算伪装成实测。
+  .get('/by-time/time-saved', async (c) => {
+    const f = dateWhere(c.req.query());
+    const res = await withRetry(() => c.env.DB.prepare(
+      `SELECT COUNT(*) AS total FROM executions${f.sql}`
+      + (f.sql ? ' AND' : ' WHERE') + " status='completed'",
+    ).bind(...f.binds).all<{ total: number }>());
+    const succeeded = Number((res.results ?? [])[0]?.total ?? 0);
+    const minutesPerRun = 1;
+    return c.json({ data: {
+      timeSaved: succeeded * minutesPerRun * 60_000, // 毫秒，与前端时长格式一致
+      totalTimeSaved: succeeded * minutesPerRun * 60_000,
+      succeededExecutions: succeeded,
+      estimatedMinutesPerWorkflow: minutesPerRun,
+      estimated: true,
+    } });
+  })
   // GET /rest/insights/by-mode
   .get('/by-mode', async (c) => {
     const f = dateWhere(c.req.query());

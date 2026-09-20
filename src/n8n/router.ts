@@ -17,6 +17,10 @@ import { templatesRoutes } from './templates';
 import { insightsRoutes } from './insights';
 import { tagRoutes } from './tags';
 import { communityNodeRoutes, listCommunityPackagePlugins } from './community-nodes';
+import {
+  licenseRoutes, optionsRoutes, communityNodeTypeRoutes, testWebhookRoutes,
+  dynamicNodeParameterRoutes, meRoutes, miscRoutes, workflowHistoryRoutes, featureDisabledGuard,
+} from './rest-extensions';
 
 const SETTINGS_KEY = 'user-settings';
 async function readSettings(c: Context): Promise<Record<string, unknown>> {
@@ -55,6 +59,10 @@ restApi.use('*', async (c, next) => {
   if (!(await isAuthed(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
   await next();
 });
+
+// 降级守卫：把本移植版**不实现**的企业/AI/云/遥测端点统一返回「未启用」契约形状，
+// 避免前端把 404 当异常。必须在鉴权墙之后、具体路由之前（见 rest-extensions.ts 说明）。
+restApi.use('*', featureDisabledGuard);
 
 // 用户偏好设置：n8n 前端 settings.store 直接 PATCH /rest/me/settings（无 /user 段）。
 // 缺失时工作流保存报 "Problem saving workflow" 404，故在此根挂载。
@@ -147,8 +155,25 @@ restApi
   .route('/insights', insightsRoutes)
   // tags：工作流标签 CRUD（REQ-27，墙内；替换原空占位）
   .route('/tags', tagRoutes)
-  // community-nodes：社区节点安装/卸载/目录（REQ-32，墙内；替换原空占位）
+  // 社区节点：安装/卸载/目录（REQ-32，墙内；替换原空占位）
   .route('/community-nodes', communityNodeRoutes)
+  // 社区节点**类型**目录：/rest/community-node-types（前端 users.store 据此派生
+  // 「可安装但未安装」的建议列表；返回空集合 → 节点搜索无幽灵条目，REQ-37）
+  .route('/community-node-types', communityNodeTypeRoutes)
+  // 社区版许可证：/rest/license（前端每个页面 + 编辑器启动都会请求）
+  .route('/license', licenseRoutes)
+  // 实例选项：/rest/options/timezones（实例时区下拉）
+  .route('/options', optionsRoutes)
+  // 测试 webhook 登记/注销：/rest/test-webhook/:id
+  .route('/test-webhook', testWebhookRoutes)
+  // 动态节点参数（loadOptions / resourceLocator）：返回空结果而非 404
+  .route('/dynamic-node-parameters', dynamicNodeParameterRoutes)
+  // 当前用户自助：/rest/me、/rest/me/survey、/rest/me/password
+  .route('/me', meRoutes)
+  // 工作流版本历史：把当前工作流呈现为唯一版本（打开编辑器即请求）
+  .route('/workflow-history', workflowHistoryRoutes)
+  // 其余零散端点：动态模板 / 遥测会话 / 同意 / NPS / 横幅 / 口令找回 / OAuth 回调 / 数据表限额
+  .route('/', miscRoutes)
   // 节点翻译头：defaultLocale 非 en 时路由守卫调用 getNodeTranslationHeaders
   // （GET /rest/node-translation-headers）。本精简版无节点翻译，返回空映射即可，
   // 缺失时前端 localizeNodeName 回退英文节点名。
@@ -164,6 +189,18 @@ restApi
       return c.json({ data: (res.results ?? []).map((r) => ({ id: r.id, name: r.name, active: !!r.active })) });
     } catch {
       return c.json({ data: [] });
+    }
+  })
+  // 激活失败详情：GET /rest/active-workflows/error/:id —— 前端在激活报错时读取具体原因。
+  .get('/active-workflows/error/:id', async (c) => {
+    try {
+      const row = await c.env.DB.prepare(
+        "SELECT id, name, active FROM workflows WHERE id=?",
+      ).bind(c.req.param('id')).first<{ id: string; name: string; active: number }>();
+      if (!row) return c.json({ code: 404, message: 'Workflow not found', data: undefined }, 404);
+      return c.json({ data: { workflowId: row.id, name: row.name, active: !!row.active, error: null } });
+    } catch {
+      return c.json({ data: { workflowId: c.req.param('id'), active: false, error: null } });
     }
   })
   // 兜底：未匹配的 /rest/* 路径统一返回 404 JSON。

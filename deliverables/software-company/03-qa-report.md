@@ -510,4 +510,135 @@ Cloudflare Workers 的 `request.url` 由 `Host` 头构造，攻击者伪造 `Hos
 4. 凭据落库仍为 KV 明文（出站已脱敏），未做静态加密。
 5. 节点数量保持 68，未向 n8n 400+ 扩容。
 
+---
+
+# R4 第四轮增量：前端所需后端全量补齐（端点对账 → 逐项落地 → 实机复验）
+
+**动机**：用户要求「把前端所需要的后端全部补齐」。不靠猜测，先做**供需对账**：
+把前端 dist 实际调用的 `/rest/*` 全量抽出来，与后端已注册路由逐条比对，再用
+**真实浏览器**确认哪些是「默认页面真的会调用」。
+
+## R4.1 方法（三层证据，缺一不可）
+
+1. **静态抽取**：从 624 个前端产物（排除 `-legacy-` 重复包）按
+   `` `(GET|POST|PUT|PATCH|DELETE)`,`/path` `` 模式抽出 **274 条**方法+路径调用。
+2. **端点级探测**：对本地 workerd 逐条实打请求，用「响应体是否为兜底文案
+   `Not found: <METHOD> /rest/...`」判定**真缺口**（区分「端点缺失」与「资源不存在」）。
+   修复前：**185 条真缺口**。
+3. **真实浏览器**（agent-browser + 内置 network 抓取）：登录后遍历
+   `/home`、`/home/workflows|executions|credentials|variables`、`/insights`、`/templates/`、
+   `/settings/personal`、`/settings/security`、以及**工作流编辑器**（含打开既有工作流），
+   采集每一页的失败请求。
+
+> 第 3 层是关键：静态清单里的企业/AI 端点大多被 feature flag 挡住，默认不会请求；
+> 只有浏览器能证明「前端真正需要什么」。
+
+## R4.2 实机发现（浏览器采集，非推测）
+
+### （1）**P0：界面登录被后端拒绝**（最严重，此前完全未被发现）
+
+浏览器登录表单实际提交 `{"emailOrLdapLoginId": "...", "password": "..."}`，
+而后端 `auth.ts` 只读 `body.email` → `undefined` → **恒 401**。
+
+后果：**API 用 `email` 手工调用能成功，但真实用户经界面永远登不进去**——
+典型的「接口通了、产品不可用」契约错配。此前的审计与 QA 全部用 API 直连，因此漏检。
+
+证据：浏览器 `POST /rest/login` 请求体快照 +
+`curl -d '{"emailOrLdapLoginId":...}' → 401` / `curl -d '{"email":...}' → 200`。
+
+### （2）`GET /rest/license` 在**每个页面**（含编辑器）启动时被调用，此前 404
+
+前端 `usage.store` 直接 `setData(data)`，读取 `data.usage.activeWorkflowTriggers`
+与 `data.license.planName`。已按该结构如实返回（`limit: -1` = 社区版不限量），
+`activeWorkflowTriggers.value` 取**真实激活工作流数**。
+
+### （3）路由被 `/:id` 抢占（3 处，静态清单看不出的「假 404」）
+
+| 请求 | 修复前实际结果 | 修复后 |
+| --- | --- | --- |
+| `GET /workflows/from-url` | 落到 `/:id` → `Workflow not found from-url` | 参数校验 400 |
+| `GET /credentials/new` | 落到 `/:id` → `Credential not found new` | 返回空白脚手架 |
+| `GET /executions/versions/:wf` | 落到 `/:id` → `Execution not found versions` | 返回版本数组 |
+
+### （4）`GET /rest/workflow-history/workflow/:id/version/:id` 404（编辑器打开即请求）
+
+前端「版本历史」面板数据源。已把当前工作流呈现为唯一版本，
+（**注意：这不是版本历史实现**——只有一条记录，PATCH/DELETE 为幂等空操作）。
+
+## R4.3 落地清单
+
+**A. 真实实现（本移植版确实具备该能力）**
+
+| 类别 | 端点 |
+| --- | --- |
+| 登录契约 | `POST /login` 兼容 `emailOrLdapLoginId` / `email` |
+| 许可证 | `GET /license`（真实计数）；`POST /license/activate|renew|enterprise/*` → 显式 400 |
+| 工作流 | `GET /workflows/from-url`（含 SSRF 防护）、`GET /:id/executions/last-successful`、`GET /:id/execution-status`、`PUT /:id/share`、`PUT /:id/transfer` |
+| 执行 | `POST /executions/delete`、`POST /executions/stopMany`、`PATCH /executions/:id`（标注，KV 存储）、`GET /executions/versions/:workflowId` |
+| 凭据 | `GET /credentials/new`、`PUT /:id/share`、`PUT /:id/transfer`、`POST /:id/authorize`、`DELETE /:id/revoke` |
+| 版本历史 | `GET|POST /workflow-history/workflow/:id[/versions]`、`GET /.../version/:id`、`PATCH|DELETE /.../versions/:id` |
+| 用户/角色 | `/users/:id/{password-reset-link,invite-link,role,settings}`、`DELETE /users/:id`、`/roles` 返回**内置 6 角色**（含 scopes）、`/roles/:slug/assignments[/:id/members]` |
+| 设置 | `GET|POST /settings/security`（字段对齐 `SecuritySettings.vue`）、`GET|PATCH /me`、`PATCH /me/password`、`POST /me/survey` |
+| 其它 | `GET /options/timezones`、`GET /community-node-types[/:name]`、`POST|DELETE /test-webhook/:id`、`POST /dynamic-node-parameters/*`（5 个）、`GET /active-workflows/error/:id`、`GET /insights/by-time/time-saved`、`POST /owner/dismiss-banner`、`PATCH /user-settings/nps-survey` 等 |
+
+**B. 显式降级（本移植版不实现该能力，返回「未启用」契约形状而非 404）**
+
+`sso`(子路径) · `ldap` · `mfa` · `secret-providers` · `external-secrets` ·
+`credential-resolvers` · `mcp` · `eventbus` · `api-keys` · `invitations` ·
+`chat` · `instance-ai` · `ai` · `projects/:id/{data-tables,folders,users}`
+
+> 代码中 `rest-extensions.ts` 的 `DISABLED_PREFIXES` 显式标注为**降级而非实现**；
+> 列表型 GET 返回 `[]`，配置型返回 `{}`，写操作返回 `{}`。
+> `/sso` 精确路径例外（登录页需要 `{configured:false, action:'GET'}`，不被降级层抢走）。
+
+## R4.4 验证矩阵（14 例，`tests/integration/rest-parity.test.ts`）
+
+| 组 | 用例 |
+| --- | --- |
+| 登录契约 | 前端字段名可登录；`email` 向后兼容；错口令仍 401 |
+| 许可证 | 结构正确 + `activeWorkflowTriggers` 为真实计数、`limit=-1` |
+| 路由抢占 | `from-url` 不回落 `/:id`；`credentials/new` 返回脚手架；`executions/versions/:id` 返回数组 |
+| 执行 | 批量删除精确命中不误删；`stopMany` 只停 running/pending；标注可写可读；不存在的执行仍 404 |
+| 设置/角色/用户 | `/settings/security` 字段齐全；`/roles` 含 owner/member 且有 scopes；`/me` 可读、`/me/password` 显式 400 |
+| 版本历史 | 列表/详情可用且带 `nodes`；不存在的工作流仍 404 |
+| 降级层 | 4 类企业端点 200 且形状正确；`/sso` 不被抢；`/projects/:id` 本体仍可达；**未知路径仍 404**（降级层不得吞掉兜底） |
+
+## R4.5 反向验证（3 项注入，均已完整还原）
+
+| 注入 | 预期失败用例 | 实际 |
+| --- | --- | --- |
+| 登录改回只读 `body.email` | 「前端字段名可登录」 | ✅ 精确 1 例转红 |
+| `from-url` 改名使其落回 `/:id` | 「`from-url` 不回落 `/:id`」 | ✅ 精确 1 例转红 |
+| 移除 `featureDisabledGuard` | 「企业端点降级」 | ✅ 精确 1 例转红 |
+
+## R4.6 实机复验（真实 workerd + 真实浏览器）
+
+- **端点级**：274 条前端调用 → 修复前 **185 条真缺口** → 修复后 **0 条**。
+  剩余 13 处 404 经逐条核验**全部为资源级**（`Workflow not found probe123` 等），
+  即「端点存在、资源不存在」的正确行为。
+- **页面级**：10 个页面（含编辑器与安全设置）浏览器采集 → **累计 0 条失败请求**；
+  `GET /license`、`GET /workflows/:id/executions/last-successful`、
+  `GET /workflow-history/...` 均 200。
+- **编辑器控制台**：重复加载无 JS 错误（一次性 `reading 'name'` 未复现，不列为缺陷）。
+
+## R4.7 门禁与工作树
+
+- `tsc --noEmit` → **0 错误**
+- `npm test` → **143 / 143 pass**（R3 的 129 + 本轮 14）
+- 新增：`src/n8n/rest-extensions.ts`、`tests/integration/rest-parity.test.ts`
+- 修改：`src/n8n/{auth,router,workflows,executions,credentials,settings,auxiliary,insights}.ts`
+
+## R4.8 本轮最终判定
+
+**判定：通过。** 前端调用的 274 条端点在实机上**零缺口**（0 条「端点缺失」404），
+其中包含 1 处 P0 登录阻断（当场修复）与 4 处路由抢占/缺失。
+
+**仍未闭环（事实陈述）**：
+
+1. 降级层返回的是「未启用」形状，**不是企业功能实现**；企业/AI 能力本身仍缺失。
+2. 工作流版本历史只有 1 条记录（无快照存储）；执行标注存 KV（无 SQL 查询能力）。
+3. `REQ-35 / REQ-36` 仍未做浏览器复测（本轮遍历未覆盖其对应交互）。
+4. 线上实例仍未部署（同 R3.9 第 1 条）。
+
+
 

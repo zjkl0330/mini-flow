@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, N8nWorkflow } from '../types';
 import { withRetry } from '../engine/retry';
-import { parseWorkflowRow, type WorkflowRow } from '../db/schema';
+import { parseWorkflowRow, type ExecutionRow, type WorkflowRow } from '../db/schema';
 import { startExecution } from '../engine/executor';
 import { sendPush } from './push';
 import { OWNER_SCOPES } from './auth';
@@ -172,6 +172,54 @@ export const workflowRoutes = new Hono<{ Bindings: Env }>()
   // 则 shouldBeReadOnly=(E≠null)&&!(E.clientId===pushRef)=true，导致整块画布只读、所有编辑操作置灰。
   // 无人持有写锁时应返回 null（→ E 保持 null → 可编辑）。
   .get('/:id/collaboration/write-lock', async (c) => c.json({ data: null }))
+  // ---- 补齐：编辑器/列表页需要、此前缺失的工作流子资源端点 ----
+  // GET /rest/workflows/from-url?url=... —— 从 URL 导入工作流 JSON。
+  // 必须注册在 /:id 之前：否则会被 /:id 捕获成 "Workflow not found from-url"（实机复现过）。
+  .get('/from-url', async (c) => {
+    const parsed = await fetchWorkflowFromUrl(c.req.query('url') ?? '');
+    if (!parsed.ok) return c.json({ code: 400, message: parsed.message, data: undefined }, 400);
+    const wf = parsed.workflow as Record<string, unknown> | null;
+    if (!wf || !Array.isArray(wf.nodes) || typeof wf.connections !== 'object' || wf.connections === null) {
+      return c.json({ code: 400, message: 'The URL did not return a valid n8n workflow JSON (missing nodes/connections).', data: undefined }, 400);
+    }
+    return c.json({ data: { ...wf, projectId: normalizeProjectId(wf.projectId) } });
+  })
+  // GET /rest/workflows/:id/executions/last-successful —— 工作流卡片/编辑器展示「上次成功执行」。
+  .get('/:id/executions/last-successful', async (c) => {
+    const id = c.req.param('id');
+    try {
+      const row = await c.env.DB.prepare(
+        "SELECT id, workflow_id, status, mode, started_at, finished_at FROM executions "
+        + "WHERE workflow_id=? AND status='completed' ORDER BY started_at DESC LIMIT 1",
+      ).bind(id).first<ExecutionRow>();
+      return c.json({ data: row ? toExecutionSummary(row) : null });
+    } catch { return c.json({ data: null }); }
+  })
+  // GET /rest/workflows/:id/execution-status —— 编辑器据此决定是否显示「运行中」指示。
+  .get('/:id/execution-status', async (c) => {
+    const id = c.req.param('id');
+    const idle = { running: false, executionId: null, mode: null, status: null };
+    try {
+      const row = await c.env.DB.prepare(
+        "SELECT id, mode, status FROM executions WHERE workflow_id=? AND status IN ('running','pending') "
+        + 'ORDER BY started_at DESC LIMIT 1',
+      ).bind(id).first<ExecutionRow>();
+      return c.json({ data: row ? { running: true, executionId: row.id, mode: row.mode, status: row.status } : idle });
+    } catch { return c.json({ data: idle }); }
+  })
+  // PUT /rest/workflows/:id/share —— 单用户实例没有可分享的接收方；幂等返回当前共享状态，
+  // 使「分享」弹窗能正常关闭而不是弹 404。
+  .put('/:id/share', async (c) => withWorkflow(
+    c.env, c.req.param('id'),
+    async (wf) => c.json({ data: { ...(await toResponse(wf)), sharedWithProjects: [] } }),
+    () => missingWorkflow(c.req.param('id')),
+  ))
+  // PUT /rest/workflows/:id/transfer —— 转移所有权：单用户实例只有一个 owner，显式拒绝。
+  .put('/:id/transfer', (c) => c.json({
+    code: 400,
+    message: 'Workflow ownership cannot be transferred on a single-user instance.',
+    data: undefined,
+  }, 400))
   .get('/:id', async (c) => withWorkflow(c.env, c.req.param('id'), async (wf) => c.json({ data: await toResponse(wf) }), () => missingWorkflow(c.req.param('id'))))
   // PUT /:id：n8n 编辑器保存更新工作流常发 PUT（部分 Flow 走 PATCH）。语义与 PATCH 一致，做全量更新。
   .put('/:id', async (c) => updateWorkflowHandler(c, c.req.param('id')))
@@ -315,6 +363,70 @@ function missingWorkflow(id: string): Response {
   return new Response(JSON.stringify({ code: 404, message: `Workflow not found ${id}`, data: undefined }), {
     status: 404, headers: { 'Content-Type': 'application/json' },
   });
+}
+
+// 执行摘要（供 last-successful / 卡片展示）：字段名对齐 n8n 前端读取习惯。
+function toExecutionSummary(row: Pick<ExecutionRow, 'id' | 'workflow_id' | 'status' | 'mode' | 'started_at' | 'finished_at'>) {
+  return {
+    id: row.id, workflowId: row.workflow_id, status: row.status, mode: row.mode,
+    startedAt: row.started_at, stoppedAt: row.finished_at, finished: row.status !== 'running' && row.status !== 'pending',
+  };
+}
+
+// ---- /workflows/from-url 的 SSRF 防护 ----
+// 该端点会让 Worker 主动请求用户提供的 URL。若不加限制，可用于探测内网与云元数据端点
+// （169.254.169.254 等）。此处：仅 http(s) + 拒绝环回/私网/链路本地/内部域名 + 手动跟随最多 3 跳且每跳重新校验。
+function isBlockedHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (h === '' ) return true;
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.internal') || h.endsWith('.local')) return true;
+  if (h === '::1' || h === '0.0.0.0') return true;
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(h);
+  if (m) {
+    const a = Number(m[1]); const b = Number(m[2]);
+    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true; // 云元数据（AWS/GCP/Azure）
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+  }
+  return false;
+}
+
+async function fetchWorkflowFromUrl(raw: string): Promise<{ ok: true; workflow: unknown } | { ok: false; message: string }> {
+  if (!raw.trim()) return { ok: false, message: 'Query parameter "url" is required.' };
+  let target: URL;
+  try { target = new URL(raw); } catch { return { ok: false, message: 'Query parameter "url" must be an absolute URL.' }; }
+
+  for (let hop = 0; hop <= 3; hop++) {
+    if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+      return { ok: false, message: 'Only http(s) URLs can be imported.' };
+    }
+    if (isBlockedHost(target.hostname)) {
+      return { ok: false, message: 'Importing from loopback or private network addresses is not allowed.' };
+    }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10_000);
+    try {
+      const res = await fetch(target.toString(), {
+        signal: ctrl.signal, redirect: 'manual', headers: { accept: 'application/json' },
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get('location');
+        if (!loc) return { ok: false, message: `Upstream responded ${res.status} without a Location header.` };
+        target = new URL(loc, target);
+        continue;
+      }
+      if (!res.ok) return { ok: false, message: `Upstream responded ${res.status}.` };
+      const text = await res.text();
+      if (text.length > 5 * 1024 * 1024) return { ok: false, message: 'Response too large (limit 5MB).' };
+      try { return { ok: true, workflow: JSON.parse(text) }; }
+      catch { return { ok: false, message: 'The URL did not return JSON.' }; }
+    } catch (e) {
+      return { ok: false, message: `Failed to fetch workflow: ${(e as Error).message}` };
+    } finally { clearTimeout(timer); }
+  }
+  return { ok: false, message: 'Too many redirects.' };
 }
 
 // 前端（n8n nodesViews/Ndv）在保存后会校验响应的 checksum/versionId：

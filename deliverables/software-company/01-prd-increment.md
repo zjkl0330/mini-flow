@@ -72,6 +72,10 @@ mini-flow 的目标是把 n8n 的「可视化工作流编排 + 节点执行」�
 | REQ-37 | 节点搜索「社区节点」幽灵条目 | P2 | 节点搜索结果与 `GET /rest/node-types` 一致，无「可搜到可添加但不在类型表」的条目 | 前端 dist + `src/n8n/node-types.ts` | **已闭环（无幽灵条目）** |
 | REQ-38 | `projectId` 为 null 与 `personal` 的取值歧义 | P2 | 前端按 projectId 过滤时与后端 `project_id` 语义一致（个人项目统一 `personal`） | `src/n8n/workflows.ts`、`src/n8n/projects.ts` | **已修复（R3 收口）** |
 | REQ-39 | 多人共享实例下工作流/执行互相可见 | P2 | 单用户 owner 实例下由鉴权墙隔离匿名访问；**多用户隔离不在本轮范围**（见第 5 节） | — | 仍存在（按设计不做） |
+| REQ-40 | **界面登录契约**：前端提交 `emailOrLdapLoginId` | **P0** | `POST /rest/login` 必须接受前端实际字段名（`emailOrLdapLoginId`），并向后兼容 `email`。只读 `email` 会导致**真实用户经界面恒 401**（API 直连却成功） | `src/n8n/auth.ts` | **已修复（R4）** |
+| REQ-41 | 前端所需后端端点全量对账（供需零缺口） | **P1** | 前端 dist 抽出的 274 条 `/rest/*` 调用，在实机上**不得出现「端点缺失」型 404**；企业/AI 等不实现的能力须返回「未启用」契约形状而非 404 | `src/n8n/*` | **已修复（R4）** |
+| REQ-42 | `GET /rest/license` 全站启动调用 | P1 | 每个页面（含编辑器）启动即请求；须返回 `{data:{usage:{activeWorkflowTriggers},license:{planId,planName}}}`，`limit=-1` 表示社区版 | `src/n8n/rest-extensions.ts` | **已修复（R4，此前 404）** |
+| REQ-43 | 路由被 `/:id` 抢占的「假 404」 | P1 | `GET /workflows/from-url`、`GET /credentials/new`、`GET /executions/versions/:wf` 三者此前分别落回 `/:id` 并报「资源不存在」；须各自实现并前置注册 | `src/n8n/{workflows,credentials,executions}.ts` | **已修复（R4）** |
 
 ---
 
