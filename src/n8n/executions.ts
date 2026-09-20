@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { withRetry } from '../engine/retry';
 import { parseWorkflowRow, type ExecutionRow, type NodeExecutionRow, type WorkflowRow } from '../db/schema';
+import { sendPush } from './push';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -129,6 +130,50 @@ export const executionRoutes = new Hono<{ Bindings: Env }>()
     ).bind('Execution stopped by user', id).run());
     return c.json({ data: { id, stopped: true, status: 'cancelled' } });
   })
+  // POST /rest/executions/:id/retry —— 重跑一次失败/既有执行（REQ-15）。
+  // 语义：新建 execution，并在其 retry_of 记录来源执行 id（不原地续跑）。
+  .post('/:id/retry', async (c) => {
+    const id = c.req.param('id');
+    const orig = await withRetry(() => c.env.DB.prepare('SELECT * FROM executions WHERE id=?').bind(id).first<ExecutionRow>());
+    if (!orig) return c.json({ code: 404, message: 'Execution not found', data: undefined }, 404);
+    const wfRow = await withRetry(() => c.env.DB.prepare('SELECT * FROM workflows WHERE id=?').bind(orig.workflow_id).first<WorkflowRow>());
+    if (!wfRow) return c.json({ code: 404, message: 'Workflow not found', data: undefined }, 404);
+    const workflow = parseWorkflowRow(wfRow);
+
+    const newId = crypto.randomUUID();
+    const input = safeJson<Record<string, unknown>>(orig.input_data) ?? {};
+    const mode = orig.mode ?? 'manual';
+
+    // 先写后执行：建 execution（携带 retry_of）→ 提交 FlowEngine → 置 running
+    await withRetry(() => c.env.DB.prepare(
+      "INSERT INTO executions (id, workflow_id, status, trigger_type, mode, input_data, retry_of, started_at) VALUES (?,?,'pending','retry',?,?,?,datetime('now'))",
+    ).bind(newId, wfRow.id, mode, JSON.stringify(input), id).run());
+
+    try {
+      await c.env.FLOW_ENGINE.create({
+        id: newId,
+        params: {
+          workflowId: workflow.id as string,
+          workflowName: workflow.name,
+          nodes: workflow.nodes,
+          connections: workflow.connections,
+          executionId: newId,
+          mode,
+          input,
+          completedNodes: [],
+        },
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await c.env.DB.prepare("UPDATE executions SET status='failed', error_message=?, finished_at=datetime('now') WHERE id=?")
+        .bind(`retry flow create failed: ${msg}`, newId).run().catch(() => {});
+      return c.json({ code: 500, message: msg, data: undefined }, 500);
+    }
+
+    await withRetry(() => c.env.DB.prepare("UPDATE executions SET status='running' WHERE id=?").bind(newId).run());
+    void sendPush(c.env, { type: 'executionStarted', executionId: newId }).catch(() => {});
+    return c.json({ data: { executionId: newId, id: newId, workflowId: wfRow.id, status: 'running', retryOf: id } });
+  })
   // GET /rest/executions —— 列表（支持 limit/offset/filter/status/workflowId，非法参数不 500）
   .get('/', async (c) => {
     const q = c.req.query();
@@ -178,8 +223,8 @@ export const executionRoutes = new Hono<{ Bindings: Env }>()
       startedAt: r.started_at,
       stoppedAt: r.finished_at,
       retryCount: r.retry_count,
-      retryOf: null,
-      retrySuccessId: null,
+      retryOf: r.retry_of ?? null,
+      retrySuccessId: r.retry_success_id ?? null,
       waitTill: null,
       deletedAt: null,
     }));
@@ -287,8 +332,8 @@ function executionDetail(r: ExecutionRow, wfRow: WorkflowRow | null, logs: NodeE
     startedAt: r.started_at,
     stoppedAt: r.finished_at,
     finished: !!r.finished_at,
-    retryOf: null,
-    retrySuccessId: null,
+    retryOf: r.retry_of ?? null,
+    retrySuccessId: r.retry_success_id ?? null,
     waitTill: null,
     workflowData,
     data: {

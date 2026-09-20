@@ -7,6 +7,14 @@ import { Hono } from 'hono';
 import type { Env } from '../types';
 import { allNodeTypeDefs } from '../plugins';
 
+// 节点声明的凭据引用（REQ-17）：name 必须存在于 credentials.ts 的 credentialTypes()，
+// 否则前端 NDV 选择凭据时找不到该类型，元数据闭环断裂。
+export interface NodeCredentialRef {
+  name: string;              // 对应 credentialTypes().name
+  required?: boolean;
+  displayOptions?: unknown;
+}
+
 // 完整 n8n INodeTypeDescription 结构（前端需要的子集）
 export interface MiniNodeType {
   name: string;
@@ -23,6 +31,8 @@ export interface MiniNodeType {
   inputs: string[] | string;
   outputs: string[] | string;
   properties: unknown[];
+  // 需要鉴权的节点声明的凭据类型（REQ-17）
+  credentials?: NodeCredentialRef[];
 }
 
 // 节点定义统一来自插件注册中心(plugins/builtin + 任何 registerPlugin 的扩展)，
@@ -105,17 +115,19 @@ export const nodeTypeRoutes = new Hono<{ Bindings: Env }>()
 function jsonSchemaFor(type: string): Record<string, object> {
   const base = { url: { type: 'string', title: 'URL' } };
   const byType: Record<string, Record<string, object>> = {
-    'n8n-nodes-base.httpRequest': { ...base, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], title: '方法' }, jsonBody: { type: 'string', title: 'Body' } },
+    'n8n-nodes-base.httpRequest': { ...base, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], title: '方法' }, jsonBody: { type: 'string', title: 'Body' }, ignoreHttpStatusErrors: { type: 'boolean', title: '忽略 HTTP 状态错误' } },
     'n8n-nodes-base.set': { name: { type: 'string', title: '字段' }, value: { type: 'string', title: '值' } },
     'n8n-nodes-base.if': { conditionSt: { type: 'string', title: '条件表达式' } },
-    'n8n-nodes-base.switch': { conditions: { type: 'object', title: '规则' } },
-    'n8n-nodes-base.removeDuplicates': { options: { type: 'object', title: '去重字段' } },
+    'n8n-nodes-base.switch': { conditions: { type: 'object', title: '规则' }, mode: { type: 'string', enum: ['rules', 'expression'], title: '模式' } },
+    'n8n-nodes-base.removeDuplicates': { options: { type: 'object', title: '去重字段' }, pairing: { type: 'object', title: '去重字段对' } },
     'n8n-nodes-base.splitInBatches': { batchSize: { type: 'number', title: '每批数量' } },
     'n8n-nodes-base.merge': { mode: { type: 'string', enum: ['append', 'combine'], title: '模式' } },
     'n8n-nodes-base.delay': { amount: { type: 'number', title: '延迟量' }, unit: { type: 'string', title: '单位' } },
     'n8n-nodes-base.code': { javascriptCode: { type: 'string', title: 'Javascript' } },
     'n8n-nodes-base.function': { code: { type: 'string', title: '表达式' } },
     'n8n-nodes-base.webhook': { path: { type: 'string', title: '路径' } },
+    'n8n-nodes-base.formTrigger': { path: { type: 'string', title: '路径' }, formTitle: { type: 'string', title: '表单标题' }, formFields: { type: 'object', title: '表单字段' } },
+    'n8n-nodes-base.respondToWebhook': { respondWith: { type: 'string', enum: ['allIncomingItems', 'json', 'text'], title: '响应内容' }, responseCode: { type: 'number', title: '状态码', default: 200 } },
     'n8n-nodes-base.scheduleTrigger': { cronExpression: { type: 'string', title: 'Cron' }, minutesInterval: { type: 'number', title: '间隔(分钟)' } },
   };
   return byType[type] ?? base;

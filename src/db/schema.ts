@@ -32,6 +32,28 @@ export interface ExecutionRow {
   locked_at: string | null;
   started_at: string;
   finished_at: string | null;
+  // 重试关联（REQ-15）：本执行由哪个 execution 重试而来 / 被重试且成功的后继（本轮只建列）
+  retry_of: string | null;
+  retry_success_id: string | null;
+}
+
+// 标签（REQ-27）
+export interface TagRow {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// 社区节点安装登记（REQ-32；元数据级）
+export interface CommunityNodeRow {
+  id: string;
+  name: string;
+  display_name: string | null;
+  version: string | null;
+  description: string | null;
+  nodes_json: string | null;
+  installed_at: string;
 }
 
 export interface NodeExecutionRow {

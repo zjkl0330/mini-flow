@@ -40,10 +40,15 @@ export const httpRequestNode = {
     let parsed: unknown = text;
     try { parsed = JSON.parse(text); } catch { /* keep text */ }
 
-    // P1-6: 非 2xx 状态码可配置抛错（n8n HTTP Request "Always Fail On Error" 语义）。
-    // 通过节点参数 options.alwaysFailOnError 显式开启；默认保持兼容（返回响应供用户自行判断）。
-    const alwaysFail = p.options?.alwaysFailOnError === true || p.alwaysFailOnError === true;
-    if (alwaysFail && !res.ok) {
+    // REQ-11: 非 2xx 默认视为失败（对齐 n8n「失败即停」语义）。
+    // 仅当节点显式开启「忽略 HTTP 状态错误 / 失败续跑」时才返回响应数据。
+    // 逃生开关（任一为真即忽略）：options.ignoreHttpStatusErrors / options.alwaysFailOnError===false
+    //   / parameters.ignoreHttpStatusErrors / parameters.continueOnFail。
+    const ignore = p.options?.ignoreHttpStatusErrors === true
+      || p.options?.alwaysFailOnError === false
+      || p.ignoreHttpStatusErrors === true
+      || p.continueOnFail === true;
+    if (!res.ok && !ignore) {
       throw new Error(`HTTP ${res.status} ${res.statusText || ''}${text ? `: ${text.slice(0, 400)}` : ''}`);
     }
 

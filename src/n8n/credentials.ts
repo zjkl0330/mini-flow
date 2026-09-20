@@ -55,6 +55,39 @@ function credentialTypes() {
       { displayName: 'Value', name: 'value', type: 'string', default: '', required: true },
     ]), test: null as unknown },
     { name: 'webhookApi', displayName: 'Webhook API', icon: 'fa:webhook', alias: 'Webhook API', documentationUrl: '', properties: [], authenticated: true, test: null as unknown },
+    // —— REQ-17：需鉴权节点声明凭据所对应的类型（补齐，保证 NDV 能选到） ——
+    { name: 'telegramApi', displayName: 'Telegram API', icon: 'fa:paper-plane', alias: 'Telegram', documentationUrl: '', properties: prop([
+      { displayName: 'Access Token', name: 'accessToken', type: 'string', default: '', required: true },
+    ]), test: null as unknown },
+    { name: 'slackApi', displayName: 'Slack API', icon: 'fa:hashtag', alias: 'Slack', documentationUrl: '', properties: prop([
+      { displayName: 'Access Token', name: 'accessToken', type: 'string', default: '', required: true },
+    ]), test: null as unknown },
+    { name: 'discordApi', displayName: 'Discord API', icon: 'fa:comments', alias: 'Discord', documentationUrl: '', properties: prop([
+      { displayName: 'Webhook URL', name: 'webhookUrl', type: 'string', default: '', required: true },
+    ]), test: null as unknown },
+    { name: 'sendGridApi', displayName: 'SendGrid API', icon: 'fa:envelope', alias: 'SendGrid', documentationUrl: '', properties: prop([
+      { displayName: 'API Key', name: 'apiKey', type: 'password', default: '', required: true, typeOptions: { password: { alwaysFocus: true } } },
+    ]), test: null as unknown },
+    { name: 'smtp', displayName: 'SMTP', icon: 'fa:envelope', alias: 'SMTP', documentationUrl: '', properties: prop([
+      { displayName: 'Host', name: 'host', type: 'string', default: '', required: true },
+      { displayName: 'Port', name: 'port', type: 'number', default: 587, required: true },
+      { displayName: 'User', name: 'user', type: 'string', default: '' },
+      { displayName: 'Password', name: 'password', type: 'password', default: '', typeOptions: { password: { alwaysFocus: true } } },
+    ]), test: null as unknown },
+    { name: 'mySql', displayName: 'MySQL', icon: 'fa:database', alias: 'MySQL', documentationUrl: '', properties: prop([
+      { displayName: 'Host', name: 'host', type: 'string', default: 'localhost', required: true },
+      { displayName: 'Port', name: 'port', type: 'number', default: 3306, required: true },
+      { displayName: 'User', name: 'user', type: 'string', default: '', required: true },
+      { displayName: 'Password', name: 'password', type: 'password', default: '', typeOptions: { password: { alwaysFocus: true } } },
+      { displayName: 'Database', name: 'database', type: 'string', default: '', required: true },
+    ]), test: null as unknown },
+    { name: 'postgres', displayName: 'Postgres', icon: 'fa:database', alias: 'Postgres', documentationUrl: '', properties: prop([
+      { displayName: 'Host', name: 'host', type: 'string', default: 'localhost', required: true },
+      { displayName: 'Port', name: 'port', type: 'number', default: 5432, required: true },
+      { displayName: 'User', name: 'user', type: 'string', default: '', required: true },
+      { displayName: 'Password', name: 'password', type: 'password', default: '', typeOptions: { password: { alwaysFocus: true } } },
+      { displayName: 'Database', name: 'database', type: 'string', default: '', required: true },
+    ]), test: null as unknown },
   ];
 }
 

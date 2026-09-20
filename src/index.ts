@@ -11,6 +11,7 @@ import { cleanupStaleLocks } from './engine/lock';
 import { listPending, purgeDeadLetter, rebuildFromDlq } from './engine/dead-letter';
 import { runScheduledWorkflows } from './engine/scheduler';
 import { consoleRoute } from './n8n/console';
+import { handleWebhookRequest, handleFormRequest } from './n8n/webhook';
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -43,6 +44,17 @@ app.get('/workflows/templates/:id', (c) => templateProxyHandler(c));
 // --- 管理后台：/console 转发到静态页 console.html（须在 SPA fallback 之前注册） ---
 app.get('/console', (c) => consoleRoute(c));
 app.get('/console/', (c) => consoleRoute(c));
+
+// --- 外部触发：Webhook / Webhook-Test / Form（REQ-14 / REQ-31） ---
+// 必须注册在 app.get('*') SPA fallback 之前，否则 /webhook/<path>、/form/<path>
+// 会落到 fallback 返回 index.html（200 text/html），外部调用方无法真正触发工作流。
+// 这些是公开外部入口，不经 /rest 鉴权墙（符合外部触发语义）。
+app.all('/webhook', (c) => handleWebhookRequest(c, { test: false }));
+app.all('/webhook/*', (c) => handleWebhookRequest(c, { test: false }));
+app.all('/webhook-test', (c) => handleWebhookRequest(c, { test: true }));
+app.all('/webhook-test/*', (c) => handleWebhookRequest(c, { test: true }));
+app.all('/form', (c) => handleFormRequest(c));
+app.all('/form/*', (c) => handleFormRequest(c));
 
 // --- 静态资源托管 + SPA fallback（n8n editor-ui dist，经 Workers Static Assets） ---
 app.get('*', async (c) => {

@@ -88,11 +88,62 @@ export const workflowRoutes = new Hono<{ Bindings: Env }>()
     ).bind(id, body.name, JSON.stringify(body.nodes ?? []), JSON.stringify(body.connections ?? {}), body.settings ? JSON.stringify(body.settings) : null, projectId).run());
     return c.json({ data: { id, name: body.name, nodes: body.nodes ?? [], connections: body.connections ?? {}, settings: body.settings, projectId, active: false, versionId: id, checksum: await computeChecksum({ id, name: body.name, nodes: body.nodes ?? [], connections: body.connections ?? {}, settings: body.settings }), isArchived: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } }, 201);
   })
+  // POST /rest/workflows/import —— 导入工作流（REQ-29）。
+  // body 兼容三种形态：裸 workflow / { workflow } / { data }。
+  // 若 id 缺失或已存在 → 重新分配 crypto.randomUUID()（避免误覆盖既有工作流）。
+  .post('/import', async (c) => {
+    const raw = await c.req.json<Record<string, unknown>>().catch(() => null);
+    if (!raw || typeof raw !== 'object') return c.json({ code: 400, message: 'Invalid workflow payload', data: undefined }, 400);
+    const inner = (raw.workflow ?? raw.data ?? raw) as Record<string, unknown>;
+    if (!inner || typeof inner !== 'object') return c.json({ code: 400, message: 'Invalid workflow payload', data: undefined }, 400);
+
+    let id = typeof inner.id === 'string' && inner.id ? (inner.id as string) : '';
+    if (id) {
+      const exists = await withRetry(() => c.env.DB.prepare('SELECT id FROM workflows WHERE id=?').bind(id).first<{ id: string }>());
+      if (exists) id = '';
+    }
+    if (!id) id = crypto.randomUUID();
+
+    const name = typeof inner.name === 'string' && inner.name ? (inner.name as string) : 'Imported workflow';
+    const nodes = Array.isArray(inner.nodes) ? inner.nodes : [];
+    const connections = inner.connections && typeof inner.connections === 'object' ? inner.connections : {};
+    const settings = inner.settings && typeof inner.settings === 'object' ? inner.settings : {};
+    const projectId = typeof inner.projectId === 'string' ? inner.projectId : null;
+
+    await withRetry(() => c.env.DB.prepare(
+      "INSERT INTO workflows (id, name, nodes, connections, settings, project_id) VALUES (?,?,?,?,?,?) "
+      + "ON CONFLICT(id) DO UPDATE SET name=excluded.name, nodes=excluded.nodes, connections=excluded.connections, settings=excluded.settings, project_id=excluded.project_id, updated_at=datetime('now')",
+    ).bind(id, name, JSON.stringify(nodes), JSON.stringify(connections), JSON.stringify(settings), projectId).run());
+
+    const merged: any = { id, name, nodes, connections, settings, active: false, projectId };
+    return c.json({ data: await toResponse(merged) }, 201);
+  })
   .get('/:id/exists', async (c) => {
     const id = c.req.param('id');
     const row = await withRetry(() => c.env.DB.prepare('SELECT id FROM workflows WHERE id=?').bind(id).first<WorkflowRow>());
     return c.json({ data: !!row });
   })
+  // GET /rest/workflows/:id/export —— 导出 n8n 原生工作流 JSON（REQ-29）。
+  // 需在 /:id 之前注册；返回附件下载（Content-Disposition）。
+  .get('/:id/export', async (c) => withWorkflow(c.env, c.req.param('id'), async (wf) => {
+    const obj = {
+      id: wf.id,
+      name: wf.name,
+      nodes: wf.nodes,
+      connections: wf.connections,
+      settings: wf.settings ?? {},
+      active: !!wf.active,
+      versionId: wf.id,
+    };
+    const safeName = String(wf.name || 'workflow').replace(/[^\w.\-]+/g, '_') || 'workflow';
+    return new Response(JSON.stringify(obj, null, 2), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Disposition': `attachment; filename="${safeName}.json"`,
+      },
+    });
+  }, () => missingWorkflow(c.req.param('id'))))
   // 协作写锁查询：collaboration.store 打开工作流时调用 z()=GET /workflows/:id/collaboration/write-lock，
   // 返回值被赋值给"当前写者"E；若返回非空且无 clientId 的对象（此前未实现该路由→SPA 兜底返回 HTML），
   // 则 shouldBeReadOnly=(E≠null)&&!(E.clientId===pushRef)=true，导致整块画布只读、所有编辑操作置灰。

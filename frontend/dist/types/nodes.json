@@ -29,7 +29,14 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "点击编辑器上的「Execute workflow」按钮即可手动触发本工作流，无需额外参数。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.webhook",
@@ -253,7 +260,77 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Mode",
+        "name": "mode",
+        "type": "options",
+        "noDataExpression": true,
+        "default": "rules",
+        "options": [
+          {
+            "name": "Rules",
+            "value": "rules"
+          },
+          {
+            "name": "Expression",
+            "value": "expression"
+          }
+        ]
+      },
+      {
+        "displayName": "Rules",
+        "name": "rules",
+        "type": "fixedCollection",
+        "default": {},
+        "typeOptions": {
+          "multipleValues": true
+        },
+        "options": [
+          {
+            "name": "values",
+            "displayName": "Rule",
+            "values": [
+              {
+                "displayName": "Conditions",
+                "name": "conditions",
+                "type": "fixedCollection",
+                "default": {},
+                "typeOptions": {
+                  "multipleValues": true
+                },
+                "options": [
+                  {
+                    "name": "conditions",
+                    "displayName": "Condition",
+                    "values": [
+                      {
+                        "displayName": "Left Value",
+                        "name": "leftValue",
+                        "type": "string",
+                        "default": ""
+                      },
+                      {
+                        "displayName": "Operation",
+                        "name": "operator",
+                        "type": "string",
+                        "default": "equals"
+                      },
+                      {
+                        "displayName": "Right Value",
+                        "name": "rightValue",
+                        "type": "string",
+                        "default": ""
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.set",
@@ -292,7 +369,43 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Assignments",
+        "name": "assignments",
+        "type": "fixedCollection",
+        "default": {},
+        "typeOptions": {
+          "multipleValues": true
+        },
+        "options": [
+          {
+            "name": "assignments",
+            "displayName": "Assignment",
+            "values": [
+              {
+                "displayName": "Name",
+                "name": "name",
+                "type": "string",
+                "default": ""
+              },
+              {
+                "displayName": "Value",
+                "name": "value",
+                "type": "string",
+                "default": ""
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "displayName": "Keep Only Set",
+        "name": "keepOnlySet",
+        "type": "boolean",
+        "default": false
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.merge",
@@ -332,7 +445,25 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Mode",
+        "name": "mode",
+        "type": "options",
+        "noDataExpression": true,
+        "default": "append",
+        "options": [
+          {
+            "name": "Append",
+            "value": "append"
+          },
+          {
+            "name": "Combine",
+            "value": "combine"
+          }
+        ]
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.removeDuplicates",
@@ -371,7 +502,46 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Options",
+        "name": "options",
+        "type": "collection",
+        "default": {},
+        "placeholder": "Add Option",
+        "options": [
+          {
+            "displayName": "Compare Field Pairs",
+            "name": "pairing",
+            "type": "fixedCollection",
+            "default": {},
+            "typeOptions": {
+              "multipleValues": true
+            },
+            "options": [
+              {
+                "name": "pairing",
+                "displayName": "Field Pair",
+                "values": [
+                  {
+                    "displayName": "Field 1",
+                    "name": "field1",
+                    "type": "string",
+                    "default": ""
+                  },
+                  {
+                    "displayName": "Field 2",
+                    "name": "field2",
+                    "type": "string",
+                    "default": ""
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.splitInBatches",
@@ -410,7 +580,15 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Batch Size",
+        "name": "batchSize",
+        "type": "number",
+        "default": 10,
+        "description": "每批处理的数据条数"
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.delay",
@@ -449,7 +627,34 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Amount",
+        "name": "amount",
+        "type": "number",
+        "default": 0
+      },
+      {
+        "displayName": "Unit",
+        "name": "unit",
+        "type": "options",
+        "default": "seconds",
+        "options": [
+          {
+            "name": "Milliseconds",
+            "value": "milliseconds"
+          },
+          {
+            "name": "Seconds",
+            "value": "seconds"
+          },
+          {
+            "name": "Minutes",
+            "value": "minutes"
+          }
+        ]
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.httpRequest",
@@ -538,6 +743,24 @@
           "rows": 4
         },
         "default": ""
+      },
+      {
+        "displayName": "Ignore HTTP Status Errors",
+        "name": "ignoreHttpStatusErrors",
+        "type": "boolean",
+        "default": false,
+        "description": "开启后，非 2xx 响应不再让节点失败，而是把响应体作为数据返回"
+      }
+    ],
+    "credentials": [
+      {
+        "name": "httpHeaderAuth"
+      },
+      {
+        "name": "httpBasicAuth"
+      },
+      {
+        "name": "httpQueryAuth"
       }
     ]
   },
@@ -628,7 +851,23 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Expression",
+        "name": "code",
+        "type": "string",
+        "typeOptions": {
+          "rows": 6
+        },
+        "default": "return $json;"
+      },
+      {
+        "displayName": "受限表达式求值（非任意 JS）：Workers 环境禁用 eval / new Function，仅支持 $json 字段引用、四则运算与白名单函数。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.outputNode",
@@ -667,7 +906,24 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Outputs",
+        "name": "outputs",
+        "type": "options",
+        "default": "last",
+        "options": [
+          {
+            "name": "First Item",
+            "value": "first"
+          },
+          {
+            "name": "Last Item",
+            "value": "last"
+          }
+        ]
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.noOp",
@@ -706,7 +962,14 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "NoOp 节点不做任何处理，仅将输入原样透传给下游。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.respondToWebhook",
@@ -740,7 +1003,35 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Respond With",
+        "name": "respondWith",
+        "type": "options",
+        "default": "allIncomingItems",
+        "options": [
+          {
+            "name": "All Incoming Items",
+            "value": "allIncomingItems"
+          },
+          {
+            "name": "JSON",
+            "value": "json"
+          },
+          {
+            "name": "Text",
+            "value": "text"
+          }
+        ]
+      },
+      {
+        "displayName": "Response Code",
+        "name": "responseCode",
+        "type": "number",
+        "default": 200,
+        "description": "返回给外部调用方的 HTTP 状态码（默认 200）"
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.errorTrigger",
@@ -772,7 +1063,14 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "当关联工作流发生错误时自动触发（透传错误上下文），无需额外参数。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.stickyNote",
@@ -802,7 +1100,14 @@
     },
     "inputs": [],
     "outputs": [],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "画布便签仅用于注释说明，不参与执行。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.textSplitter",
@@ -841,7 +1146,30 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Text",
+        "name": "text",
+        "type": "string",
+        "typeOptions": {
+          "rows": 4
+        },
+        "default": "",
+        "description": "待切分的文本，支持 {{ $json.field }} 引用"
+      },
+      {
+        "displayName": "Chunk Size",
+        "name": "chunkSize",
+        "type": "number",
+        "default": 4000
+      },
+      {
+        "displayName": "Chunk Overlap",
+        "name": "chunkOverlap",
+        "type": "number",
+        "default": 200
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.filter",
@@ -880,7 +1208,59 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Conditions",
+        "name": "conditions",
+        "type": "fixedCollection",
+        "default": {},
+        "typeOptions": {
+          "multipleValues": true
+        },
+        "options": [
+          {
+            "name": "conditions",
+            "displayName": "Condition",
+            "values": [
+              {
+                "displayName": "Left Value",
+                "name": "leftValue",
+                "type": "string",
+                "default": ""
+              },
+              {
+                "displayName": "Operation",
+                "name": "operator",
+                "type": "string",
+                "default": "equals"
+              },
+              {
+                "displayName": "Right Value",
+                "name": "rightValue",
+                "type": "string",
+                "default": ""
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "displayName": "Combinator",
+        "name": "combinator",
+        "type": "options",
+        "default": "and",
+        "options": [
+          {
+            "name": "And",
+            "value": "and"
+          },
+          {
+            "name": "Or",
+            "value": "or"
+          }
+        ]
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.sort",
@@ -919,7 +1299,47 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Sort By",
+        "name": "rules",
+        "type": "fixedCollection",
+        "default": {},
+        "typeOptions": {
+          "multipleValues": true
+        },
+        "options": [
+          {
+            "name": "rules",
+            "displayName": "Sort Field",
+            "values": [
+              {
+                "displayName": "Field",
+                "name": "field",
+                "type": "string",
+                "default": ""
+              },
+              {
+                "displayName": "Direction",
+                "name": "type",
+                "type": "options",
+                "default": "ascending",
+                "options": [
+                  {
+                    "name": "Ascending",
+                    "value": "ascending"
+                  },
+                  {
+                    "name": "Descending",
+                    "value": "descending"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.aggregate",
@@ -958,7 +1378,15 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Fields",
+        "name": "fields",
+        "type": "json",
+        "default": "[]",
+        "description": "JSON 数组：[{ field, aggregation, grouping? }]"
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.math",
@@ -997,7 +1425,15 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Expression",
+        "name": "expression",
+        "type": "string",
+        "default": "",
+        "placeholder": "{{ $json.a }} + {{ $json.b }}"
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.dateTime",
@@ -1036,7 +1472,31 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Date Property",
+        "name": "dateProperty",
+        "type": "string",
+        "default": "",
+        "description": "用于计算的日期字段名（留空取当前时间）"
+      },
+      {
+        "displayName": "Additional Fields",
+        "name": "additionalFields",
+        "type": "collection",
+        "default": {},
+        "placeholder": "Add Field",
+        "options": [
+          {
+            "displayName": "Add",
+            "name": "add",
+            "type": "json",
+            "default": "{\"value\":0,\"unit\":\"days\"}",
+            "description": "{ value, unit: days|hours|minutes|weeks|months|years|milliseconds }"
+          }
+        ]
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.extractFromFile",
@@ -1075,7 +1535,15 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Source Key",
+        "name": "sourceKey",
+        "type": "string",
+        "default": "json",
+        "description": "存放 JSON 字符串的字段名"
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.editFields",
@@ -1114,7 +1582,31 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Mode",
+        "name": "mode",
+        "type": "options",
+        "default": "merge",
+        "options": [
+          {
+            "name": "Merge (保留原字段)",
+            "value": "merge"
+          },
+          {
+            "name": "Set (覆盖)",
+            "value": "set"
+          }
+        ]
+      },
+      {
+        "displayName": "Fields",
+        "name": "fields",
+        "type": "json",
+        "default": "[]",
+        "description": "JSON 数组：[{ name, value }]"
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.d1query",
@@ -1205,7 +1697,67 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Connection",
+        "name": "connection",
+        "type": "fixedCollection",
+        "default": {},
+        "options": [
+          {
+            "name": "connection",
+            "displayName": "Connection",
+            "values": [
+              {
+                "displayName": "Host",
+                "name": "host",
+                "type": "string",
+                "default": "localhost"
+              },
+              {
+                "displayName": "Port",
+                "name": "port",
+                "type": "number",
+                "default": 3306
+              },
+              {
+                "displayName": "User",
+                "name": "user",
+                "type": "string",
+                "default": ""
+              },
+              {
+                "displayName": "Password",
+                "name": "password",
+                "type": "string",
+                "typeOptions": {
+                  "password": true
+                },
+                "default": ""
+              },
+              {
+                "displayName": "Database",
+                "name": "database",
+                "type": "string",
+                "default": ""
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "displayName": "当前 Worker 环境未配置外部 MySQL 连接：本节点为占位（不伪造查询结果）。如需真实查询请用 D1 Query 或 HTTP Request 直连数据库 API。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ],
+    "credentials": [
+      {
+        "name": "mySql",
+        "required": true
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.postgres",
@@ -1244,7 +1796,67 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Connection",
+        "name": "connection",
+        "type": "fixedCollection",
+        "default": {},
+        "options": [
+          {
+            "name": "connection",
+            "displayName": "Connection",
+            "values": [
+              {
+                "displayName": "Host",
+                "name": "host",
+                "type": "string",
+                "default": "localhost"
+              },
+              {
+                "displayName": "Port",
+                "name": "port",
+                "type": "number",
+                "default": 5432
+              },
+              {
+                "displayName": "User",
+                "name": "user",
+                "type": "string",
+                "default": ""
+              },
+              {
+                "displayName": "Password",
+                "name": "password",
+                "type": "string",
+                "typeOptions": {
+                  "password": true
+                },
+                "default": ""
+              },
+              {
+                "displayName": "Database",
+                "name": "database",
+                "type": "string",
+                "default": ""
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "displayName": "当前 Worker 环境未配置外部 PostgreSQL 连接：本节点为占位（不伪造查询结果）。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ],
+    "credentials": [
+      {
+        "name": "postgres",
+        "required": true
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.sqlite",
@@ -1283,7 +1895,20 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Query",
+        "name": "query",
+        "type": "string",
+        "required": true,
+        "default": "",
+        "typeOptions": {
+          "editor": "sqlEditor",
+          "rows": 5
+        },
+        "description": "在 D1(SQLite) 上执行，支持 {{ $json.x }} 插值"
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.cron",
@@ -1354,7 +1979,30 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Path",
+        "name": "path",
+        "type": "string",
+        "required": true,
+        "default": "",
+        "placeholder": "my-form",
+        "description": "对外表单路径：/form/<path>"
+      },
+      {
+        "displayName": "Form Title",
+        "name": "formTitle",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "displayName": "Form Fields",
+        "name": "formFields",
+        "type": "json",
+        "default": "[]",
+        "description": "JSON 数组：[{ fieldName, fieldLabel, fieldType }]"
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.intervalTrigger",
@@ -1386,7 +2034,14 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Interval (minutes)",
+        "name": "minutesInterval",
+        "type": "number",
+        "default": 60
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.openAi",
@@ -1441,6 +2096,12 @@
         },
         "default": ""
       }
+    ],
+    "credentials": [
+      {
+        "name": "openAiApi",
+        "required": true
+      }
     ]
   },
   {
@@ -1480,7 +2141,34 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Model",
+        "name": "model",
+        "type": "string",
+        "default": "text-embedding-3-small"
+      },
+      {
+        "displayName": "API Key",
+        "name": "apiKey",
+        "type": "string",
+        "typeOptions": {
+          "password": true
+        },
+        "default": ""
+      },
+      {
+        "displayName": "向量化需要第三方 AI 凭据：当前 Worker 环境未配置时，本节点为占位（不伪造向量结果）。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ],
+    "credentials": [
+      {
+        "name": "openAiApi"
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.huggingFace",
@@ -1519,7 +2207,35 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Model",
+        "name": "model",
+        "type": "string",
+        "default": "meta-llama/Llama-3-8b"
+      },
+      {
+        "displayName": "API Key",
+        "name": "apiKey",
+        "type": "string",
+        "typeOptions": {
+          "password": true
+        },
+        "default": ""
+      },
+      {
+        "displayName": "HF 推理需要 API 凭据：当前 Worker 环境未配置时，本节点为占位（不伪造推理结果）。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ],
+    "credentials": [
+      {
+        "name": "huggingFaceApi",
+        "required": true
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.replace",
@@ -1668,7 +2384,34 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Field",
+        "name": "field",
+        "type": "string",
+        "default": "text"
+      },
+      {
+        "displayName": "Action",
+        "name": "action",
+        "type": "options",
+        "default": "uppercase",
+        "options": [
+          {
+            "name": "Uppercase",
+            "value": "uppercase"
+          },
+          {
+            "name": "Lowercase",
+            "value": "lowercase"
+          },
+          {
+            "name": "Title Case",
+            "value": "titleCase"
+          }
+        ]
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.splitOut",
@@ -1848,7 +2591,14 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Field",
+        "name": "field",
+        "type": "string",
+        "default": "text"
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.limit",
@@ -1933,7 +2683,37 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Renaming",
+        "name": "renaming",
+        "type": "fixedCollection",
+        "default": {},
+        "typeOptions": {
+          "multipleValues": true
+        },
+        "options": [
+          {
+            "name": "renaming",
+            "displayName": "Rename",
+            "values": [
+              {
+                "displayName": "From Key",
+                "name": "fromKey",
+                "type": "string",
+                "default": ""
+              },
+              {
+                "displayName": "To Key",
+                "name": "toKey",
+                "type": "string",
+                "default": ""
+              }
+            ]
+          }
+        ]
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.zip",
@@ -2214,7 +2994,15 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Assignments",
+        "name": "assignments",
+        "type": "json",
+        "default": "[]",
+        "description": "JSON 数组：[{ name, value }]"
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.httpSend",
@@ -2370,7 +3158,47 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "To",
+        "name": "to",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "displayName": "From",
+        "name": "from",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "displayName": "Subject",
+        "name": "subject",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "displayName": "Text",
+        "name": "text",
+        "type": "string",
+        "typeOptions": {
+          "rows": 4
+        },
+        "default": ""
+      },
+      {
+        "displayName": "发送邮件需要 SendGrid 凭据：当前 Worker 环境未配置时，本节点为占位（不伪造发送成功）。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ],
+    "credentials": [
+      {
+        "name": "sendGridApi",
+        "required": true
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.email",
@@ -2399,7 +3227,41 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "To",
+        "name": "to",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "displayName": "Subject",
+        "name": "subject",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "displayName": "Text",
+        "name": "text",
+        "type": "string",
+        "typeOptions": {
+          "rows": 4
+        },
+        "default": ""
+      },
+      {
+        "displayName": "发送邮件需要 SMTP 凭据：当前 Worker 环境未配置时，本节点为占位（不伪造发送成功）。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ],
+    "credentials": [
+      {
+        "name": "smtp",
+        "required": true
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.slack",
@@ -2428,7 +3290,35 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Channel",
+        "name": "channel",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "displayName": "Text",
+        "name": "text",
+        "type": "string",
+        "typeOptions": {
+          "rows": 4
+        },
+        "default": ""
+      },
+      {
+        "displayName": "发送 Slack 消息需要 Slack API 凭据：当前 Worker 环境未配置时，本节点为占位。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ],
+    "credentials": [
+      {
+        "name": "slackApi",
+        "required": true
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.telegram",
@@ -2457,7 +3347,35 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Chat ID",
+        "name": "chatId",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "displayName": "Text",
+        "name": "text",
+        "type": "string",
+        "typeOptions": {
+          "rows": 4
+        },
+        "default": ""
+      },
+      {
+        "displayName": "发送 Telegram 消息需要 Bot Token：当前 Worker 环境未配置时，本节点为占位。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ],
+    "credentials": [
+      {
+        "name": "telegramApi",
+        "required": true
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.discord",
@@ -2486,7 +3404,35 @@
     "outputs": [
       "main"
     ],
-    "properties": []
+    "properties": [
+      {
+        "displayName": "Webhook URL",
+        "name": "webhookUrl",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "displayName": "Content",
+        "name": "content",
+        "type": "string",
+        "typeOptions": {
+          "rows": 4
+        },
+        "default": ""
+      },
+      {
+        "displayName": "发送 Discord 消息需要 Webhook URL 凭据：当前 Worker 环境未配置时，本节点为占位。",
+        "name": "notice",
+        "type": "notice",
+        "default": ""
+      }
+    ],
+    "credentials": [
+      {
+        "name": "discordApi",
+        "required": true
+      }
+    ]
   },
   {
     "type": "n8n-nodes-base.telegramChannelReader",

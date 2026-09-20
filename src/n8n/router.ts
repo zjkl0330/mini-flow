@@ -14,6 +14,9 @@ import { workflowRoutes } from './workflows';
 import { executionRoutes } from './executions';
 import { dlqRoutes } from './dead-letter';
 import { templatesRoutes } from './templates';
+import { insightsRoutes } from './insights';
+import { tagRoutes } from './tags';
+import { communityNodeRoutes, listCommunityPackagePlugins } from './community-nodes';
 
 const SETTINGS_KEY = 'user-settings';
 async function readSettings(c: Context): Promise<Record<string, unknown>> {
@@ -105,8 +108,12 @@ restApi
   .route('/sessions', sessionsRoutes)
   .route('/nodes', nodesRoutes)
   .route('/node-types', nodeTypeRoutes)
-  // 插件目录：/rest/plugins（社区插件 / 内置插件清单）
-  .get('/plugins', (c) => c.json({ data: listPlugins() }))
+  // 插件目录：/rest/plugins —— 内置插件 + 社区节点包（REQ-32）合并展示
+  .get('/plugins', async (c) => {
+    const builtin = listPlugins();
+    const community = await listCommunityPackagePlugins(c.env).catch(() => []);
+    return c.json({ data: [...builtin, ...community] });
+  })
   .route('/workflow-dependencies', workflowDependencyRoutes)
   .route('/projects', projectRoutes)
   // 创建项目：前端 POST /rest/projects 或 /rest/projects/ 均需命中。
@@ -136,10 +143,12 @@ restApi
   .get('/meta', (c) => c.json({ data: { instanceId: 'mini-flow-instance', instanceMeta: {} } }))
   // sso：n8n 契约 GET /rest/sso（登录页据此渲染 SSO 入口，属公开端点）
   .get('/sso', (c) => c.json({ data: { configured: false }, action: 'GET' }))
-  // community-nodes：社区节点清单（空）
-  .get('/community-nodes', (c) => c.json({ data: [] }))
-  // tags：工作流标签
-  .get('/tags', (c) => c.json({ data: [] }))
+  // insights：实例洞察聚合（REQ-26，墙内）
+  .route('/insights', insightsRoutes)
+  // tags：工作流标签 CRUD（REQ-27，墙内；替换原空占位）
+  .route('/tags', tagRoutes)
+  // community-nodes：社区节点安装/卸载/目录（REQ-32，墙内；替换原空占位）
+  .route('/community-nodes', communityNodeRoutes)
   // 节点翻译头：defaultLocale 非 en 时路由守卫调用 getNodeTranslationHeaders
   // （GET /rest/node-translation-headers）。本精简版无节点翻译，返回空映射即可，
   // 缺失时前端 localizeNodeName 回退英文节点名。
