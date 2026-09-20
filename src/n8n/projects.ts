@@ -5,6 +5,9 @@ import type { Context } from 'hono';
 import type { Env } from '../types';
 import { withRetry } from '../engine/retry';
 
+// 个人项目 id 的唯一定义源：workflows / executions 等模块据此归一化 projectId（REQ-38）。
+export const PERSONAL_PROJECT_ID = 'personal';
+
 export interface ProjectRow {
   id: string;
   name: string;

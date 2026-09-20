@@ -69,8 +69,8 @@ mini-flow 的目标是把 n8n 的「可视化工作流编排 + 节点执行」�
 | REQ-34 | `GET /rest/workflows/new` 无写副作用 | P2 | 该 GET 只返回带新 id 的空工作流对象，**不落库**、不产生执行/审计副作用 *(实证：代码直读，无 INSERT)* | `src/n8n/workflows.ts` | 已修复 |
 | REQ-35 | 首页横幅 / 版本提示 i18n | P2 | 关闭版本提示与动态横幅后不再出现「已更新至版本 1」等文案 | `src/n8n/settings.ts`、`frontend/dist`(只读) | 未证实 |
 | REQ-36 | NDV 头部占位方块、执行步骤按钮文字丢失 | P2 | 实机 NDV 头部/执行步骤按钮渲染正常、无空白占位。需实机复测（属前端渲染，无法由代码静态断言） | 前端 dist + 节点元数据 | 未证实 |
-| REQ-37 | 节点搜索「社区节点」幽灵条目 | P2 | 节点搜索结果与 `GET /rest/node-types` 一致，无「可搜到可添加但不在类型表」的条目 | 前端 dist + `src/n8n/node-types.ts` | 未证实 |
-| REQ-38 | `projectId` 为 null 与 `personal` 的取值歧义 | P2 | 前端按 projectId 过滤时与后端 `project_id` 语义一致（个人项目统一 `personal`）。需实机复测 | `src/n8n/workflows.ts`、`src/n8n/projects.ts` | 未证实 |
+| REQ-37 | 节点搜索「社区节点」幽灵条目 | P2 | 节点搜索结果与 `GET /rest/node-types` 一致，无「可搜到可添加但不在类型表」的条目 | 前端 dist + `src/n8n/node-types.ts` | **部分证实仍存在** |
+| REQ-38 | `projectId` 为 null 与 `personal` 的取值歧义 | P2 | 前端按 projectId 过滤时与后端 `project_id` 语义一致（个人项目统一 `personal`） | `src/n8n/workflows.ts`、`src/n8n/projects.ts` | **已修复（R3 收口）** |
 | REQ-39 | 多人共享实例下工作流/执行互相可见 | P2 | 单用户 owner 实例下由鉴权墙隔离匿名访问；**多用户隔离不在本轮范围**（见第 5 节） | — | 仍存在（按设计不做） |
 
 ---

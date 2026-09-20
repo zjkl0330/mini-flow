@@ -347,3 +347,153 @@ node --import tsx --test tests/unit/node-param-alignment.test.ts
 **建议**：可进入阶段 5 交付汇总。
 
 > 本轮新增脚本（不计入测试）：`.workbuddy/tmp/round2-repro.ts`、`qa-respondwith-e2e.mjs`。
+
+---
+
+# R3 第三轮增量：安全与确定性收口（SEC-1 / SEC-2 / SEC-3）
+
+**触发**：R2 交付后遗留清单中的第 1、5 项属「可在部署前收口」的风险，本轮予以闭环：
+
+1. `DEV_FALLBACK_PWD` 硬编码回退且**无启动期/请求期拦截** —— 公开默认口令即可登录 owner（P0）。
+2. 同名 webhook path 命中多个已激活工作流时依赖隐式 rowid 顺序（不确定性）。
+
+## R3.1 SEC-1：凭据守卫改为「生产默认拒绝」
+
+**改动**：`src/n8n/auth.ts` 新增 `resolveCredentials(env)`，取代原先的 `env.X || DEV_FALLBACK` 无条件回退。
+
+| 场景 | 收口前 | 收口后 |
+| --- | --- | --- |
+| 生产未配 Secret | 回退到 `mini-flow-demo-password` → **任何人可登 owner** | `/rest/login` **503** + 修复指引；受保护路由 **401** |
+| 配置了弱凭据（口令<8 / 密钥<16） | 视为有效配置放行 | 视为「未配置」→ 503 |
+| `ENVIRONMENT=development/dev/local` | — | 回退口令生效（本地调试路径保持可用） |
+| 任意环境 + 伪造 `Host: localhost` | — | **无效**：判定只看环境变量，不读请求 Host |
+
+**设计要点（防绕过）**：最初的实现草案以「请求是否来自回环地址」判定本地环境 —— 自审时发现
+Cloudflare Workers 的 `request.url` 由 `Host` 头构造，攻击者伪造 `Host: localhost` 即可命中回退分支，
+等于没修。改为**纯环境变量白名单**并**默认拒绝**（未显式声明开发环境即不启用回退），堵死该绕过路径。
+
+配套：`Env` 增加 `ENVIRONMENT`；`.dev.vars.example`（示例）+ `.gitignore` 忽略 `.dev.vars`（防密钥入库）。
+
+## R3.2 SEC-2：外部触发入口确定性选取
+
+`matchWebhookWorkflow` / `matchFormWorkflow` 的查询补 `ORDER BY created_at ASC, rowid ASC`：
+同名 path 命中多个已激活工作流时，**最早创建者胜出**；`created_at` 为秒级精度可能相等，以 `rowid` 稳定兜底。
+消除了「改一条无关数据就可能让 webhook 换绑到另一个工作流」的隐性不确定性。
+
+## R3.3 SEC-3：部署前自检门禁
+
+新增 `scripts/predeploy-check.mjs`（挂 `predeploy`，`npm run deploy` 自动触发，失败即中止）：
+结构绑定齐全性、Secret 显式确认（`MINI_FLOW_SECRETS_CONFIRMED=1`）、凭据守卫在位性、
+`.dev.vars` 已被忽略、`migrations/*.sql` 与 `schema.sql` 的表集合一致性、关键扩展列在位。
+
+**实跑结果**：`通过 10 / 警告 0 / 阻断 1`，唯一阻断项为 Secret 确认（预期行为，即本门禁要拦住的风险）。
+
+## R3.4 新增用例与验证矩阵（18 例）
+
+| 文件 | 用例数 | 覆盖 |
+| --- | --- | --- |
+| `tests/integration/auth-guard.test.ts` | 8 | 生产默认拒绝（503 / 无 Set-Cookie）、受保护路由 401、Host 伪造不可绕过、开发环境回退可用且会话有效、显式 production 即便本地也不回退、达标凭据正常登录 + 错口令 401、弱凭据按未配置处理、`resolveCredentials` 判定矩阵 |
+| `tests/integration/webhook-determinism.test.ts` | 6 | 同名 path 取最早创建者（与插入顺序无关）、`created_at` 相同时 rowid 稳定兜底且可重复、active/test 模式互斥匹配、httpMethod 不匹配回落、form 入口确定性、path 归一化（首尾斜杠/编码）后仍命中 |
+| `tests/integration/project-id.test.ts` | 4 | 历史 NULL 行归一化为 `personal` 且与 `/rest/projects` 一致、`projectId=personal` 过滤兼容 NULL 行、新建/导入/详情出参不为 null、`normalizeProjectId` 判定矩阵 |
+
+## R3.5 反向验证（2 项注入，均已完整还原）
+
+| 编号 | 注入 | 结果 | 还原 |
+| --- | --- | --- | --- |
+| **INJ-R3-1** | `auth.ts` 移除 `if (!DEV_ENVIRONMENTS.has(envName)) return null;`（即恢复「无条件下回退」） | `auth-guard.test.ts` → **3/8，5 例转红** ✅ 捕获（含核心断言「默认口令绝不能登入」） | ✅ 已还原，`tsc` 0 |
+| **INJ-R3-2** | `webhook.ts` 移除 `ORDER BY created_at ASC, rowid ASC` | `webhook-determinism.test.ts` → **5/6，确定性用例转红**（实测返回 `w-late` 而非 `w-early`）✅ 捕获 | ✅ 已还原 |
+
+> 说明：INJ-R3-1 中还暴露了一处**真实的自我缺陷** —— 编辑过程中 `auth.ts` 出现 3 处不一致
+> （`checkLogin` 声明未同步、遗留 `pwdOf` 引用、`isAuthed` 传参数量错误），导致登录路径 **500**。
+> 该问题由 `tsc --noEmit` + 用例（`200 !== 500`）当场拦截，未流出到提交。已完整修正。
+
+## R3.6 门禁与工作树
+
+- `node scripts/run-tests.mjs` → **129 tests / 129 pass / 0 fail**（R2 的 111 + SEC 14 + REQ-38 4）。
+- `tsc --noEmit` → **零错误**。
+- `node scripts/predeploy-check.mjs` → 10 通过 / 1 阻断（Secret 确认，属预期）。
+- 反向验证 2 项注入**全部还原**；两处修复均经 `grep` 复核在位。
+
+## R3.7 实机核验：REQ-37 / REQ-38 摘标签（并新增一处修复）
+
+在本地 workerd（`wrangler dev` + 真实 D1 本地库，加载 `.dev.vars`）上以真实 HTTP 请求核验，
+把 PRD 中 4 项「未证实」中的 2 项摘掉标签，其中 **1 项证实仍存在并当场修复**。
+
+### REQ-38 —— 证实存在，已修复（P2 → 已闭环）
+
+| 探测 | 收口前 | 收口后 |
+| --- | --- | --- |
+| `GET /rest/projects` | 个人项目 `id = "personal"` | 同 |
+| `GET /rest/workflows` | `projectId: null`（**不一致**） | `projectId: "personal"` ✅ |
+| `GET /rest/workflows?filter={"projectId":"personal"}` | 命中 **0** 条（历史行都是 NULL） | 命中 **6** 条 ✅ |
+
+**影响**：前端「个人项目」视图按 projectId 过滤时，`null !== 'personal'` → 工作流列表为空。
+属真实可见缺陷，而非「未证实」。
+
+**修复**：`src/n8n/projects.ts` 导出唯一语义源 `PERSONAL_PROJECT_ID`；
+`src/n8n/workflows.ts` 新增 `normalizeProjectId()`，在**所有 REST 出参**（列表 / `toResponse` 详情·导入·激活·归档·更新 / `/workflows/new`）与写入处归一化；
+`projectId='personal'` 过滤时兼容历史 `NULL` 行（`project_id IS NULL OR project_id=?`）；
+`src/n8n/executions.ts` 的执行列表过滤同步对齐。无数据迁移（读时归一 + 读旧行时顺带写回）。
+
+新增 `tests/integration/project-id.test.ts`（4 例）锁定契约。
+
+### REQ-37 —— 部分证实仍存在（未闭环）
+
+`GET /rest/node-types` 返回 **68** 项，与内置节点数一致；但已安装的社区节点
+（本地库存在 `n8n-nodes-e2e`，其声明节点类型为 `x.y`）**未出现在类型表中**（`grep '"x.y"'` 命中 0，
+类型表也不带 `isCommunity` 标记）。
+
+即：**「可搜到可添加、但不在类型表 / 不可执行」的幽灵条目风险仍然存在**，只是触发条件是
+「先安装社区节点」而非默认状态。运行时该类节点会走「未知节点类型透传」，不报错也不做事——
+正是审计中「节点能力只到形似」的同一类问题。
+
+**建议**：把已安装社区节点的声明类型注册进类型表（或标记为不可执行并给出提示），
+属独立增量，未在本轮范围。
+
+### REQ-35 / REQ-36 —— 仍未证实
+
+均为纯前端渲染（版本横幅文案、NDV 头部与执行步骤按钮），需真实浏览器会话观察，
+本轮以 REST/HTTP 层核验无法覆盖，保留「未证实」。
+
+## R3.8 门禁与工作树（含 REQ-38 后）
+
+- `node scripts/run-tests.mjs` → **129 tests / 129 pass / 0 fail**（R2 的 111 + SEC 14 + REQ-38 4）。
+- `tsc --noEmit` → **零错误**。
+- 反向验证 3 项注入（INJ-R3-1/2/3）**全部被捕获并完整还原**：
+
+| 编号 | 注入 | 结果 |
+| --- | --- | --- |
+| INJ-R3-1 | 移除凭据守卫的环境白名单判定 | `auth-guard` 5/8，核心断言「默认口令绝不能登入」转红 ✅ |
+| INJ-R3-2 | 移除 webhook 查询的 `ORDER BY` | 确定性用例转红（实测返回 `w-late`）✅ |
+| INJ-R3-3 | `toResponse` 回退为 `wf.projectId ?? null` | project-id 用例转红（`null !== 'personal'`）✅ |
+
+- 实机实证（真实 workerd 运行时，非仅测试夹具）：
+
+| 场景 | 实测 |
+| --- | --- |
+| 无 `.dev.vars` → 默认口令 `POST /rest/login` | **503** + 修复指引，无 `Set-Cookie` |
+| 同上 + 伪造 `Host: localhost` | **503**（不可绕过） |
+| 无 `.dev.vars` → `GET /rest/workflows` | **401** |
+| 有 `.dev.vars` → 本地口令登录 | **200**，会话可访问 `/rest/workflows`、`/rest/owner` = **200** |
+| 有 `.dev.vars` → 旧硬编码默认口令 | **401**（已失效） |
+| `projectId` 归一化 | `null` → `"personal"`；filter 命中 0 → **6** |
+
+- 本地 `.dev.vars` 已创建（gitignore 生效，`git status` 不出现）；`scripts/predeploy-check.mjs` 实跑
+  `通过 10 / 阻断 1`（Secret 确认，属门禁应拦项）。
+
+## R3.9 本轮最终判定
+
+**判定：通过（含 1 项新发现并当场修复）。**
+
+**仍未闭环（需运维/后续决策）**：
+
+1. **线上实例仍运行旧代码**，本轮修复（含 P0 凭据守卫、REQ-38）**尚未部署**。
+   部署前必须：`wrangler secret put ADMIN_PASSWORD` / `wrangler secret put SESSION_SECRET`
+   → 再 `MINI_FLOW_SECRETS_CONFIRMED=1 npm run deploy`。
+   ⚠️ 未配置 Secret 直接部署，实例会「失败关闭」（登录 503），这是**有意的安全取舍**而非故障。
+2. **REQ-37 幽灵条目仍存在**（已安装社区节点的类型未注册进类型表），建议独立增量处理。
+3. REQ-35 / REQ-36 仍需浏览器实机复测。
+4. 凭据落库仍为 KV 明文（出站已脱敏），未做静态加密。
+5. 节点数量保持 68，未向 n8n 400+ 扩容。
+
+

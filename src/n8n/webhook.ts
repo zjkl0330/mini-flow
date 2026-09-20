@@ -53,8 +53,13 @@ export async function matchWebhookWorkflow(
   method: string,
   opts: { test: boolean },
 ): Promise<{ workflow: N8nWorkflow; webhookNode: N8nNode } | null> {
-  const rows = await env.DB.prepare('SELECT * FROM workflows WHERE active=?')
-    .bind(opts.test ? 0 : 1).all<WorkflowRow>();
+  // 确定性选取（SEC-2）：同名 path 命中多个已激活工作流时，取**最早创建**的一个。
+  // 此前无 ORDER BY，SQLite 的返回顺序是实现细节（依赖 rowid / 索引选择），
+  // 导致「改一条无关数据就能让 webhook 换绑到另一个工作流」的隐性不确定性。
+  // created_at 为秒级精度，可能相等，故以 rowid 兜底稳定排序。
+  const rows = await env.DB.prepare(
+    'SELECT * FROM workflows WHERE active=? ORDER BY created_at ASC, rowid ASC',
+  ).bind(opts.test ? 0 : 1).all<WorkflowRow>();
   const target = normalizePath(path);
   const wantedMethod = String(method ?? 'GET').toUpperCase();
 
@@ -76,7 +81,10 @@ export async function matchFormWorkflow(
   env: Env,
   path: string,
 ): Promise<{ workflow: N8nWorkflow; formNode: N8nNode } | null> {
-  const rows = await env.DB.prepare('SELECT * FROM workflows WHERE active=1').all<WorkflowRow>();
+  // 同上（SEC-2）：form 入口同样需要确定性选取，避免同名 path 随机命中。
+  const rows = await env.DB.prepare(
+    'SELECT * FROM workflows WHERE active=1 ORDER BY created_at ASC, rowid ASC',
+  ).all<WorkflowRow>();
   const target = normalizePath(path);
   for (const row of rows.results ?? []) {
     for (const node of parseNodes(row)) {

@@ -10,6 +10,7 @@ import type { Env } from '../types';
 import { withRetry } from '../engine/retry';
 import { parseWorkflowRow, type ExecutionRow, type NodeExecutionRow, type WorkflowRow } from '../db/schema';
 import { sendPush } from './push';
+import { PERSONAL_PROJECT_ID } from './projects';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -185,7 +186,16 @@ export const executionRoutes = new Hono<{ Bindings: Env }>()
     const where: string[] = [];
     const binds: (string | number)[] = [];
     if (filter.workflowId) { where.push('workflow_id=?'); binds.push(filter.workflowId); }
-    if (filter.projectId) { where.push("workflow_id IN (SELECT id FROM workflows WHERE project_id=?)"); binds.push(filter.projectId); }
+    if (filter.projectId) {
+      // 与 workflows 列表保持同一 projectId 语义（REQ-38）：'personal' 需兼容历史 NULL 行
+      if (filter.projectId === PERSONAL_PROJECT_ID) {
+        where.push("workflow_id IN (SELECT id FROM workflows WHERE project_id IS NULL OR project_id=?)");
+        binds.push(PERSONAL_PROJECT_ID);
+      } else {
+        where.push("workflow_id IN (SELECT id FROM workflows WHERE project_id=?)");
+        binds.push(filter.projectId);
+      }
+    }
     if (dbStatuses) {
       if (dbStatuses.length === 0) where.push('0'); // 未识别状态 → 命中空集
       else { where.push(`status IN (${dbStatuses.map(() => '?').join(',')})`); binds.push(...dbStatuses); }

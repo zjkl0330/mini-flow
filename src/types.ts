@@ -85,6 +85,7 @@ export interface Env {
   ASSETS?: Fetcher; // Workers Static Assets（托管 n8n editor-ui dist）
   SESSION_SECRET?: string; // 会话令牌签名密钥（生产用 Workers Secret）
   ADMIN_PASSWORD?: string; // 登录密码（生产用 Workers Secret）
+  ENVIRONMENT?: string; // 'production' 时禁用开发回退凭据（见 n8n/auth.ts 的失败关闭策略）
 }
 
 // Durable Object SSE 门面接口（供客户端调用）

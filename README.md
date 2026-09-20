@@ -170,16 +170,41 @@ npm install
 # 1) 建 D1
 npx wrangler d1 create mini-flow-db            # 把 database_id 填进 wrangler.jsonc
 npx wrangler d1 execute mini-flow-db --file=schema.sql
-# 2) 本地
+# 2) 本地（必须先把示例变量复制为 .dev.vars，否则登录会 503）
+cp .dev.vars.example .dev.vars
 npm run dev
 # 3) 类型检查 + 测试
 npm run type-check
 npm test
 # 4) 同步节点元数据到前端（已在 predeploy 自动执行）
 npm run gen:nodes
-# 5) 部署
-npm run deploy
+# 5) 配置生产 Secret（必须，否则实例「失败关闭」无法登录）
+npx wrangler secret put ADMIN_PASSWORD         # 口令 >= 8 位
+npx wrangler secret put SESSION_SECRET         # 会话签名密钥 >= 16 位
+# 6) 部署（predeploy 自动执行 gen:nodes + 部署前自检）
+MINI_FLOW_SECRETS_CONFIRMED=1 npm run deploy
 ```
+
+### 部署必读：凭据与部署前自检
+
+**凭据守卫（失败关闭）**：`ADMIN_PASSWORD` / `SESSION_SECRET` 必须通过 Worker Secret 配置。
+两者任一缺失或过短时，`/rest/login` 返回 **503** 并给出修复指引，所有受保护路由返回 **401**
+—— 实例变为「不可用」，而**不会**回退到公开的默认口令。
+
+内置的开发回退口令**只在 `ENVIRONMENT` 显式为 `development` / `dev` / `local` 时生效**
+（写入 `.dev.vars`，该文件已被 `.gitignore` 忽略）。判定只看环境变量、**不看请求 Host**，
+因此伪造 `Host: localhost` 无法绕过。生产可显式设置 `ENVIRONMENT=production` 以双保险。
+
+**部署前自检**（`scripts/predeploy-check.mjs`，挂在 `predeploy` 钩子上，失败即中止部署）：
+
+| 类别 | 检查内容 |
+| --- | --- |
+| 结构 | D1 `DB` / KV `CREDENTIALS` / DO `PUSH` / Workflows `FLOW_ENGINE` 绑定齐全；`frontend/dist/index.html` 已构建 |
+| 安全 | 需 `MINI_FLOW_SECRETS_CONFIRMED=1` 显式确认已配置 Secret；凭据守卫在位；回退口令未扩散到其它源文件 |
+| 卫生 | `.gitignore` 已忽略 `.dev.vars` |
+| 迁移 | `migrations/*.sql` 新增表/列已同步进 `schema.sql` |
+
+> 注意：`predeploy` 由 npm 生命周期触发。直接 `npx wrangler deploy` 会跳过该自检。
 
 ---
 
@@ -238,4 +263,9 @@ flowchart LR
 - [x] 外部触发落地：`/webhook/:path` · `/webhook-test/:path` · `/form/:path`（含 responseMode 三态回包）
 - [x] 节点可配置化：68/68 节点 `properties` 非空 + 11 节点 `credentials` 声明
 - [x] REST 能力端点补齐：executions retry / insights / tags CRUD / 工作流导入导出 / 社区节点登记
-- [x] 回归测试体系：`npm test` 111 例（含反向验证探针，可捕获注入缺陷）
+- [x] 回归测试体系：`npm test` 129 例（含反向验证探针，可捕获注入缺陷）
+- [x] 凭据守卫：`ADMIN_PASSWORD` / `SESSION_SECRET` 未配置时**失败关闭**（登录 503、受保护路由 401），
+      开发回退口令仅在 `ENVIRONMENT=development|dev|local` 生效（判定不看请求 Host，防伪造绕过）
+- [x] 外部触发确定性：同名 webhook/form path 按 `created_at, rowid` 稳定选取最早创建者
+- [x] `projectId` 语义统一为 `personal`（历史 NULL 行读时归一 + 过滤兼容），与 `/rest/projects` 一致
+- [x] 部署前自检门禁 `scripts/predeploy-check.mjs`（绑定完整性 / Secret 确认 / 防密钥入库 / 迁移一致性）

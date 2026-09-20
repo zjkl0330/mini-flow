@@ -5,3 +5,8 @@ dist/
 *.local
 .DS_Store
 .workbuddy/
+
+# 本地开发密钥（wrangler dev 读取，绝不可提交）；仅保留示例文件
+.dev.vars
+.dev.vars.*
+!.dev.vars.example

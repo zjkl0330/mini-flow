@@ -7,6 +7,20 @@ import { parseWorkflowRow, type WorkflowRow } from '../db/schema';
 import { startExecution } from '../engine/executor';
 import { sendPush } from './push';
 import { OWNER_SCOPES } from './auth';
+import { PERSONAL_PROJECT_ID } from './projects';
+
+/**
+ * 统一 projectId 语义（REQ-38 收口）。
+ *
+ * 问题：`workflows.project_id` 历史上以 NULL 表示「个人项目」，而 `/rest/projects`
+ * 暴露的个人项目 id 是字符串 `'personal'`。前端按 projectId 过滤项目工作流时，
+ * `null !== 'personal'` 会导致个人项目下看不到工作流（实机核验：`GET /rest/workflows`
+ * 返回 `projectId: null`，与 `/rest/projects` 的 `'personal'` 不一致）。
+ *
+ * 收口：所有 REST 出参与写入统一归一化为 `'personal'`；查询时再兼容历史 NULL 行。
+ */
+export const normalizeProjectId = (v: unknown): string =>
+  (typeof v === 'string' && v.trim() !== '' ? v : PERSONAL_PROJECT_ID);
 
 // 安全整数解析：非法输入回落默认值，越界钳制到边界（避免 NaN 进入 SQL LIMIT）
 function safeInt(raw: string | undefined, fallback: number, min: number, max: number): number {
@@ -39,7 +53,16 @@ export const workflowRoutes = new Hono<{ Bindings: Env }>()
     const where: string[] = [];
     const binds: (string | number)[] = [];
     const proj = filter.projectId ?? projectId;
-    if (proj) { where.push('project_id=?'); binds.push(proj); }
+    if (proj) {
+      // 'personal' 等价于「project_id = 'personal' 或历史 NULL」——避免个人项目下漏掉旧工作流
+      if (proj === PERSONAL_PROJECT_ID) {
+        where.push('(project_id IS NULL OR project_id=?)');
+        binds.push(PERSONAL_PROJECT_ID);
+      } else {
+        where.push('project_id=?');
+        binds.push(proj);
+      }
+    }
     if (typeof filter.name === 'string' && filter.name.trim() !== '') {
       where.push("name LIKE ? ESCAPE '\\'");
       binds.push(`%${escapeLike(filter.name.trim())}%`);
@@ -59,7 +82,7 @@ export const workflowRoutes = new Hono<{ Bindings: Env }>()
 
     const rows = (res.results ?? []).map((r) => ({
       id: r.id, name: r.name, active: !!r.active, isArchived: !!((r as any).archived),
-      projectId: (r as any).project_id ?? null, createdAt: r.created_at, updatedAt: r.updated_at, tags: [],
+      projectId: normalizeProjectId((r as any).project_id), createdAt: r.created_at, updatedAt: r.updated_at, tags: [],
     }));
     // n8n 工作流列表消费 response.data（数组）；同时透出 count 便于前端显示总数
     return c.json({ data: rows, count: rows.length });
@@ -67,7 +90,7 @@ export const workflowRoutes = new Hono<{ Bindings: Env }>()
   .get('/new', async (c) => {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    return c.json({ data: { id, name: 'Untitled workflow', nodes: [], connections: {}, active: false, settings: {}, projectId: null, versionId: id, checksum: await computeChecksum({ id, name: 'Untitled workflow' }), isArchived: false, createdAt: now, updatedAt: now } });
+    return c.json({ data: { id, name: 'Untitled workflow', nodes: [], connections: {}, active: false, settings: {}, projectId: PERSONAL_PROJECT_ID, versionId: id, checksum: await computeChecksum({ id, name: 'Untitled workflow' }), isArchived: false, createdAt: now, updatedAt: now } });
   })
   // 前端在创建新工作流时 POST /workflows/new 取得默认工作流与 id（Vue route 预取）。
   // 与 GET 等价；enabled:true 标记该 id 可编辑，前端据此进入画布。
@@ -77,7 +100,7 @@ export const workflowRoutes = new Hono<{ Bindings: Env }>()
     // 优先采用前端回传的 id（新建工作流 URL 用该 short-id，刷新时用同一 id 取回）；
     // 无 id 才生成 UUID，保证客户端/服务端 id 一致。
     const id = body.id ?? crypto.randomUUID();
-    const projectId = (body as any).projectId ?? null;
+    const projectId = normalizeProjectId((body as any).projectId);
     // 用 upsert（ON CONFLICT DO UPDATE）：模板导入/自动保存时 n8n 会用同一 id 再次 POST，
     // 若走纯 INSERT 会因 UNIQUE 约束返回 500。改为幂等写入，重复 POST 即更新，不再报错。
     await withRetry(() => c.env.DB.prepare(
@@ -108,7 +131,7 @@ export const workflowRoutes = new Hono<{ Bindings: Env }>()
     const nodes = Array.isArray(inner.nodes) ? inner.nodes : [];
     const connections = inner.connections && typeof inner.connections === 'object' ? inner.connections : {};
     const settings = inner.settings && typeof inner.settings === 'object' ? inner.settings : {};
-    const projectId = typeof inner.projectId === 'string' ? inner.projectId : null;
+    const projectId = normalizeProjectId(inner.projectId);
 
     await withRetry(() => c.env.DB.prepare(
       "INSERT INTO workflows (id, name, nodes, connections, settings, project_id) VALUES (?,?,?,?,?,?) "
@@ -199,7 +222,7 @@ export const workflowRoutes = new Hono<{ Bindings: Env }>()
 async function workflowAfterState(env: Env, id: string): Promise<[any, WorkflowRow | null]> {
   const row = await withRetry(() => env.DB.prepare('SELECT * FROM workflows WHERE id=?').bind(id).first<WorkflowRow>());
   if (!row) return [null, null];
-  const wf: any = { ...parseWorkflowRow(row), projectId: (row as any).project_id ?? null, isArchived: !!(row as any).archived };
+  const wf: any = { ...parseWorkflowRow(row), projectId: normalizeProjectId((row as any).project_id), isArchived: !!(row as any).archived };
   return [wf, row];
 }
 
@@ -222,11 +245,11 @@ async function setArchived(env: Env, id: string, archived: number, c: { json: an
 // 新建/默认工作流（POST /workflows/new）：返回带新 id 的空工作流。
 // 前端在创建新工作流时 POST /workflows/new 预先取得 id，body 可携带 projectId。
 export async function newWorkflowHandler(c: Context<{ Bindings: Env }>) {
-  let projectId: string | null = null;
+  let projectId: string = PERSONAL_PROJECT_ID;
   try {
     const body = await c.req.json<{ projectId?: string | null }>();
-    projectId = body?.projectId ?? null;
-  } catch { /* 空 body 或无 JSON → 忽略，用 null */ }
+    projectId = normalizeProjectId(body?.projectId);
+  } catch { /* 空 body 或无 JSON → 忽略，用个人项目 */ }
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   return c.json({ data: { id, name: 'Untitled workflow', nodes: [], connections: {}, active: false, settings: {}, projectId, enabled: true, versionId: id, checksum: await computeChecksum({ id, name: 'Untitled workflow' }), isArchived: false, createdAt: now, updatedAt: now } });
@@ -256,7 +279,11 @@ async function updateWorkflowHandler(c: Context<{ Bindings: Env }>, id: string) 
   const name = body.name ?? row?.name ?? 'Untitled workflow';
   const settingsJson = body.settings ? JSON.stringify(body.settings) : (row?.settings ?? null);
   const rawProj = (body as any).projectId;
-  const proj: string | null = rawProj === undefined ? (row ? ((row as any).project_id ?? null) : null) : (rawProj === null ? null : String(rawProj));
+  // 归一化（REQ-38）：未显式指定 → 沿用已有值；显式 null/空 → 'personal'。
+  // 注意：该比较同时起到「读到历史 NULL 行时顺带写回归一值」的迁移效果。
+  const proj: string = normalizeProjectId(
+    rawProj === undefined ? (row ? (row as any).project_id : undefined) : rawProj,
+  );
   const active = body.active !== undefined ? (body.active ? 1 : 0) : (row?.active ?? 0);
 
   if (!row) {
@@ -310,7 +337,7 @@ async function computeChecksum(wf: { id: string; name?: string; nodes?: unknown[
 async function toResponse(wf: any) {
   return {
     id: wf.id, name: wf.name, nodes: wf.nodes, connections: wf.connections, settings: wf.settings,
-    projectId: wf.projectId ?? null,
+    projectId: normalizeProjectId(wf.projectId),
     active: !!wf.active,
     isArchived: !!(wf as any).isArchived,
     versionId: wf.id,
