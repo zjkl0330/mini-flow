@@ -5,7 +5,7 @@ import type { Context } from 'hono';
 import type { Env } from '../types';
 import { authRoutes, isAuthed } from './auth';
 import { settingsRoutes, userRoutes, userListRoutes, moduleSettingsRoutes } from './settings';
-import { rolesRoutes, variablesRoutes } from './aux';
+import { rolesRoutes, variablesRoutes } from './auxiliary';
 import { projectRoutes, createProject } from './projects';
 import { credentialRoutes, credentialTypesHandler } from './credentials';
 import { nodeTypeRoutes, nodeTypeDefs } from './node-types';
