@@ -48,9 +48,11 @@ export const tagRoutes = new Hono<{ Bindings: Env }>()
     const updated = await withRetry(() => c.env.DB.prepare('SELECT * FROM tags WHERE id=?').bind(id).first<TagRow>());
     return c.json({ data: toTag(updated as TagRow) });
   })
-  // 删除（级联删关联）
+  // 删除（级联删关联）；不存在的 id → 404，与 community-nodes/:name/uninstall 语义统一
   .delete('/:id', async (c) => {
     const id = c.req.param('id');
+    const row = await withRetry(() => c.env.DB.prepare('SELECT id FROM tags WHERE id=?').bind(id).first<{ id: string }>());
+    if (!row) return c.json({ code: 404, message: 'Tag not found', data: undefined }, 404);
     await withRetry(() => c.env.DB.batch([
       c.env.DB.prepare('DELETE FROM workflow_tags WHERE tag_id=?').bind(id),
       c.env.DB.prepare('DELETE FROM tags WHERE id=?').bind(id),

@@ -5,15 +5,18 @@ import { safeEvaluate } from '../engine/evaluator';
 // ---- Set：写入字段（对全部输入项生效，兼容 n8n 参数形态） ----
 export const setNode = {
   async execute(ctx: NodeExecutionContext) {
-    const p = ctx.node.parameters;
+    const p = ctx.node.parameters ?? {};
     const items = ctx.inputData?.main ?? [];
     // n8n Set 对每个输入项各写一份；无输入项时产出空项保持端点非空。
     const sources = items.length ? items : [{ json: {} }];
+    // keepOnlySet=true：仅保留本节点写入的字段，丢弃上游输入字段（n8n「Keep Only Set Fields」语义）。
+    const keepOnlySet = Boolean(p.keepOnlySet ?? p.options?.keepOnlySet ?? false);
     const out = sources.map((it) => {
-      const item = { ...(it.json ?? {}) };
+      const src = it.json ?? {};
+      const item: Record<string, any> = keepOnlySet ? {} : { ...src };
       if (p.assignments) {
         for (const a of p.assignments.assignments ?? []) {
-          item[String(a.name)] = interpKeepType(a.value, it.json ?? {});
+          item[String(a.name)] = interpKeepType(a.value, src);
         }
       } else if (p.name !== undefined) {
         item[String(p.name)] = interpKeepType(p.value, item);

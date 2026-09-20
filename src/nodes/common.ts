@@ -85,3 +85,44 @@ export const outputNode = {
     return { main: items };
   },
 };
+
+// ---- 参数形态适配（供各执行器复用，避免「面板能填但不生效」） ----
+// n8n 的 `json` 型参数在编辑器里以「字符串」持久化（用户敲入的 JSON 文本），
+// 而执行器期望的是「已解析的数组/对象」。以下两个辅助做「数组/对象 ↔ JSON 字符串」
+// 容错解析：已是目标形态则原样返回，字符串则尝试 JSON.parse，失败/不匹配返回 null。
+
+/** 容错解析为数组：数组原样返回；JSON 字符串解析为数组；否则 null。 */
+export function asJsonArray(v: unknown): unknown[] | null {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (!s) return null;
+    try {
+      const parsed = JSON.parse(s);
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** 容错解析为普通对象：对象原样返回；JSON 字符串解析为对象；否则 null。 */
+export function asJsonRecord(v: unknown): Record<string, unknown> | null {
+  if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+    return v as Record<string, unknown>;
+  }
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (!s) return null;
+    try {
+      const parsed = JSON.parse(s);
+      return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}

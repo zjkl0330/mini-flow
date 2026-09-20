@@ -55,11 +55,24 @@ export const errorTriggerNode = {
   },
 };
 
-// ---- Respond to Webhook：把输入作响应体回显，便于手动运行拿到输出 ----
+// ---- Respond to Webhook：把输入作响应体回显 —— 按 respondWith 决定回包形态 ----
+// respondWith: 'allIncomingItems'(默认) / 'json' → 输入原样回显（webhook.ts 以 application/json 回包）；
+//              'text' → 取首个输入项的文本（字符串或 .text 字段），webhook.ts 以 text/plain 回包。
 export const respondToWebhookNode = {
   async execute(ctx: NodeExecutionContext): Promise<NodeOutput> {
+    const p = ctx.node.parameters ?? {};
+    const items = ctx.inputData?.main ?? [];
+    if (String(p.respondWith ?? 'allIncomingItems') === 'text') {
+      const first = items[0]?.json;
+      const text = typeof first === 'string'
+        ? first
+        : (first && typeof first === 'object' && typeof (first as { text?: unknown }).text === 'string')
+          ? String((first as { text: unknown }).text)
+          : (first == null ? '' : JSON.stringify(first));
+      return { main: [{ json: { text } }] };
+    }
     return {
-      main: ctx.inputData?.main?.length ? [...ctx.inputData.main] : [{ json: { responseMode: 'onReceived' } }],
+      main: items.length ? [...items] : [{ json: { responseMode: 'onReceived' } }],
     };
   },
 };

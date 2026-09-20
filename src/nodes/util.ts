@@ -1,6 +1,7 @@
 // util-nodes: 列表 / 数据工具 / 存储节点执行器（真实可执行）
 // Limit / RenameKeys / Zip / ItemLists(List/Join/Aggregate) / GetMultiple / Store(KV) / Convert。
 import type { NodeExecutionContext } from '../types';
+import { asJsonArray } from './common';
 
 type Item = { json: Record<string, any> };
 type NodeOutput = Record<string, Item[]>;
@@ -15,14 +16,20 @@ export const limitNode = {
 };
 
 // ---- Rename Keys：批量重命名字段 ----
+// 参数形态：`renaming` 为 fixedCollection，编辑器写入形如 { renaming: [ {fromKey,toKey} ] }；
+// 兼容旧版「直接数组」形态（p.renaming 或 p.renameKeys 即数组）。
 export const renameKeysNode = {
   async execute(ctx: NodeExecutionContext): Promise<NodeOutput> {
     const p = ctx.node.parameters ?? {};
-    const renames = p.renaming ?? p.renameKeys ?? [];
+    // fixedCollection：先取出内层 `renaming` 数组，避免把对象当数组迭代导致 "not iterable" 崩溃。
+    const renamingInner = (p.renaming !== null && typeof p.renaming === 'object' && !Array.isArray(p.renaming))
+      ? (p.renaming as { renaming?: unknown }).renaming
+      : p.renaming;
+    const renames = (asJsonArray(renamingInner) ?? asJsonArray(p.renameKeys) ?? []) as any[];
     const items = ctx.inputData?.main ?? [];
     return { main: items.map((it) => {
       const j: Record<string, any> = { ...(it.json ?? {}) };
-      for (const r of (renames as any[])) {
+      for (const r of renames) {
         const from = r.fromKey ?? r.oldKey; const to = r.toKey ?? r.newKey;
         if (from && to && from in j) { j[to] = j[from]; delete j[from]; }
       }
@@ -138,15 +145,16 @@ function str(v: unknown): string {
 }
 
 // ---- Assign：节点内声明变量（存储在输出字段,用于模板/后续引用） ----
+// 参数形态：`assignments` 为 json 型（编辑器值为字符串），需容错解析为数组。
 export const assignNode = {
   async execute(ctx: NodeExecutionContext): Promise<NodeOutput> {
     const p = ctx.node.parameters ?? {};
     const items = ctx.inputData?.main ?? [];
-    const assigns = p.assignments ?? p.parameters ?? [];
+    const assigns = (asJsonArray(p.assignments) ?? asJsonArray(p.parameters) ?? []) as any[];
     const toItem = (arr: unknown[]): any[] => arr.length ? arr : [{}];
     return { main: toItem(items).map((it) => {
       const j: Record<string, any> = { ...(it.json ?? {}) };
-      for (const a of (assigns as any[])) {
+      for (const a of assigns) {
         if (a.name) j[a.name] = a.value;
       }
       return { json: j };

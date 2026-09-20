@@ -3,6 +3,7 @@
 // Filter / Sort / Aggregate / Math / DateTime / ExtractFromJson / EditFields(Set多字段) / Convert协信。
 // 命名统一 node.xxx 前缀匹配 n8n 参数形态，worker 受限环境下保持确定性、幂等实现。
 import type { NodeExecutionContext } from '../types';
+import { asJsonArray, asJsonRecord } from './common';
 
 type Item = { json: Record<string, any> };
 type NodeOutput = Record<string, Item[]>;
@@ -85,7 +86,8 @@ export const aggregateNode = {
   async execute(ctx: NodeExecutionContext): Promise<NodeOutput> {
     const p = ctx.node.parameters ?? {};
     const items = ctx.inputData?.main ?? [];
-    const fields = Array.isArray(p.fields) ? p.fields : (p.aggregation?.fields ?? []);
+    // `fields` 为 json 型参数（编辑器值为字符串），需容错解析为数组；兼容 p.fields / p.aggregation.fields 两种落点。
+    const fields = (asJsonArray(p.fields) ?? asJsonArray(p.aggregation?.fields) ?? []) as any[];
     const groupEntry = fields.find((f: any) => f.grouping);
     const groupField = groupEntry ? String(groupEntry.field ?? '') : '';
     const groups: Record<string, Item[]> = {};
@@ -207,7 +209,11 @@ export const dateTimeNode = {
       const j = it.json ?? {};
       const base = p.dateProperty ? new Date(String(getPath(j, p.dateProperty) ?? Date.now())) : new Date();
       if (isNaN(base.getTime())) return { json: j };
-      const addT = p.additionalFields?.add ?? {};
+      // `additionalFields` 为 collection、内层 `add` 为 json 型（编辑器值为字符串），需容错解析为对象。
+      const additionalFields = (typeof p.additionalFields === 'string'
+        ? asJsonRecord(p.additionalFields)
+        : (p.additionalFields as Record<string, unknown> | undefined)) ?? {};
+      const addT = (asJsonRecord(additionalFields.add) ?? {}) as Record<string, any>;
       const target = new Date(base);
       const amt = num(addT.value ?? 0);
       if (amt) {
@@ -249,11 +255,12 @@ export const editFieldsNode = {
   async execute(ctx: NodeExecutionContext): Promise<NodeOutput> {
     const p = ctx.node.parameters ?? {};
     const items = ctx.inputData?.main ?? [];
-    const fields = p.fields ?? p.assignments ?? [];
+    // `fields` 为 json 型参数（编辑器值为字符串），需容错解析为数组。
+    const fields = (asJsonArray(p.fields) ?? asJsonArray(p.assignments) ?? []) as any[];
     const mode = p.mode ?? (p.fields ? 'merge' : 'set');
     const out = items.map((it) => {
-      let j = { ...(it.json ?? {}) };
-      for (const f of (fields as any[])) {
+      const j = { ...(it.json ?? {}) };
+      for (const f of fields) {
         const key = f.name ?? f.field;
         if (!key) continue;
         if (mode === 'set') j[key] = keepVal(f.value, j);

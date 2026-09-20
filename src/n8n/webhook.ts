@@ -121,14 +121,14 @@ export function flattenNodeOutput(outputData: string | null): unknown {
   return parsed;
 }
 
-// 轮询执行终态，取回包节点输出与状态码（responseNode / lastNode）。
+// 轮询执行终态，取回包节点输出、状态码与回包形态（responseNode / lastNode）。
 // 超时或无法取到 → 返回 null（调用方回退 200 {"message":"Workflow was started"}）。
 export async function waitForExecutionResponse(
   env: Env,
   executionId: string,
   mode: ResponseMode,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
-): Promise<{ statusCode: number; body: unknown } | null> {
+): Promise<{ statusCode: number; body: unknown; respondWith: string } | null> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const row = await env.DB.prepare(
@@ -143,28 +143,37 @@ export async function waitForExecutionResponse(
       const chosen = mode === 'responseNode'
         ? ([...results].reverse().find((r) => isRespondToWebhookType(r.node_type)) ?? results[results.length - 1])
         : results[results.length - 1];
-      const statusCode = await resolveResponseCode(env, row.workflow_id, chosen?.node_name);
+      const meta = await resolveRespondMeta(env, row.workflow_id, chosen?.node_name);
       const body = flattenNodeOutput(chosen?.output_data ?? null);
-      return { statusCode, body };
+      return { statusCode: meta.statusCode, body, respondWith: meta.respondWith };
     }
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
   return null;
 }
 
-// 状态码来源：respondToWebhook 节点的 parameters.responseCode，缺省 200。
-async function resolveResponseCode(env: Env, workflowId: string, nodeName: string | undefined): Promise<number> {
-  if (!nodeName) return 200;
+// 回包元数据来源：respondToWebhook 节点的 parameters.responseCode / responseWith，缺省 { 200, 'json' }。
+interface RespondMeta { statusCode: number; respondWith: string; }
+
+async function resolveRespondMeta(env: Env, workflowId: string, nodeName: string | undefined): Promise<RespondMeta> {
+  const fallback: RespondMeta = { statusCode: 200, respondWith: 'json' };
+  if (!nodeName) return fallback;
   try {
     const row = await env.DB.prepare('SELECT nodes FROM workflows WHERE id=?')
       .bind(workflowId).first<{ nodes: string }>();
-    if (!row?.nodes) return 200;
+    if (!row?.nodes) return fallback;
     const nodes = JSON.parse(row.nodes) as N8nNode[];
     const node = nodes.find((n) => n.name === nodeName && isRespondToWebhookType(n.type ?? ''));
-    const code = Number(node?.parameters?.responseCode);
-    return Number.isFinite(code) && code >= 100 && code <= 599 ? code : 200;
+    if (!node) return fallback;
+    const code = Number(node.parameters?.responseCode);
+    // respondWith='text' → 调用方以 text/plain 回包；其余（allIncomingItems/json）按 JSON 回包。
+    const respondWith = String(node.parameters?.respondWith ?? '') === 'text' ? 'text' : 'json';
+    return {
+      statusCode: Number.isFinite(code) && code >= 100 && code <= 599 ? code : 200,
+      respondWith,
+    };
   } catch {
-    return 200;
+    return fallback;
   }
 }
 
@@ -233,6 +242,14 @@ export async function handleWebhookRequest(
   if (!resp) {
     // 超时/未完成 → 回落 onReceived（不返回 504，避免外部调用方把「已触发」误判为失败）
     return c.json({ message: 'Workflow was started' }, 200);
+  }
+  // respondWith='text'：以 text/plain 回纯文本（取回包体的 .text 字段，否则整体字符串化）。
+  if (resp.respondWith === 'text') {
+    const b = resp.body as { text?: unknown } | string | null;
+    const text = (b && typeof b === 'object' && typeof b.text === 'string')
+      ? b.text
+      : (typeof b === 'string' ? b : (b == null ? '' : JSON.stringify(b)));
+    return new Response(text, { status: resp.statusCode, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
   }
   return new Response(typeof resp.body === 'string' ? resp.body : JSON.stringify(resp.body), {
     status: resp.statusCode,
