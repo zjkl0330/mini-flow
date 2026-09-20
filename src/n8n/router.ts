@@ -28,8 +28,20 @@ async function readSettings(c: Context): Promise<Record<string, unknown>> {
 export const restApi = new Hono<{ Bindings: Env }>({ strict: false })
 
 // --- 全局鉴权墙（P0-3）：除公开端点外，/rest/* 一律要求合法会话，否则 401。
-// 公开白名单仅含登录/初始化/实例 meta；其余所有读写在未登录时一律拒绝。 ---
-const OPEN_PATHS = new Set<string>(['/login', '/owner/setup', '/meta']);
+// 公开白名单只含「登录页渲染 + 登录/登出」所必需的端点（与上游 n8n 的公开面一致）：
+// 这些端点要么不含实例数据（settings 为静态配置），要么本身就是登录入口。
+// 其余所有读写在未登录时一律拒绝。
+const OPEN_PATHS = new Set<string>([
+  '/login',          // POST 登录 / GET 登录态探测
+  '/logout',         // POST 注销（幂等，无副作用泄露）
+  '/owner/setup',    // 首次初始化（本实现单用户，直接返回 owner）
+  '/meta',           // 实例元信息（无敏感数据）
+  '/settings',       // 登录页需要读取 instance/auth/locale 等静态配置
+  '/sso',            // 登录页 SSO 按钮
+  '/module-settings',// 登录页 quick-connect / MFA 等模块开关
+  '/forgot-password',
+  '/resolve-signup-token',
+]);
 restApi.use('*', async (c, next) => {
   if (c.req.method === 'OPTIONS') return next();
   // restApi 挂载在 /rest 下；c.req.url 是完整 URL(含 /rest)，而白名单按 n8n 契约(无前缀)。
@@ -54,8 +66,7 @@ restApi
     const merged = { ...(await readSettings(c)), ...body };
     await (c.env.CREDENTIALS?.put(SETTINGS_KEY, JSON.stringify(merged))).catch(() => undefined);
     return c.json({ data: merged });
-  })
-  .get('/me/settings', async (c) => c.json({ data: await readSettings(c) }));
+  });
 
 // 会话列表 + 节点目录：独立子应用（Hono .route() 必须接收子应用而非函数）
 const sessionsRoutes = new Hono<{ Bindings: Env }>()
@@ -123,6 +134,8 @@ restApi
   })
   // meta：实例元信息
   .get('/meta', (c) => c.json({ data: { instanceId: 'mini-flow-instance', instanceMeta: {} } }))
+  // sso：n8n 契约 GET /rest/sso（登录页据此渲染 SSO 入口，属公开端点）
+  .get('/sso', (c) => c.json({ data: { configured: false }, action: 'GET' }))
   // community-nodes：社区节点清单（空）
   .get('/community-nodes', (c) => c.json({ data: [] }))
   // tags：工作流标签
@@ -143,7 +156,16 @@ restApi
     } catch {
       return c.json({ data: [] });
     }
-  });
+  })
+  // 兜底：未匹配的 /rest/* 路径统一返回 404 JSON。
+  // 历史缺陷：未注册的 /rest/* 会穿透到 index.ts 的 SPA fallback，返回 200 + HTML，
+  // 前端把 HTML 当 JSON 解析而报错，同时掩盖「端点不存在」这一事实。
+  // 必须注册在所有具体路由之后，否则会抢占它们。
+  .all('*', (c) => c.json({
+    code: 404,
+    message: `Not found: ${c.req.method} ${new URL(c.req.url).pathname}`,
+    data: undefined,
+  }, 404));
 
 // n8n 返回统一包裹 { data, ... }，错误用 HTTP 状态 + { code, message }
 export function wrap(data: unknown) {

@@ -35,10 +35,21 @@ export const userRoutes = new Hono<{ Bindings: Env }>()
   })
   .get('/', (c) => c.json({ data: [] }));
 
-// n8n 用户列表：/rest/users（复数）返回 { data: { count, items } }，侧边栏/成员列表据此读取
+// n8n 用户列表：/rest/users（复数）返回 { data: { count, items } }，侧边栏/成员列表据此读取。
+// 本实现为单用户实例，必须回传该唯一 owner —— 返回空列表会与 GET /rest/user/me（已登录 owner）
+// 自相矛盾，导致「成员管理」页显示无成员。
 export const userListRoutes = new Hono<{ Bindings: Env }>()
-  .get('/', (c) => c.json({ data: { count: 0, items: [] } }))
-  .get('/:id', (c) => c.json({ data: null, code: 404, message: 'User not found' }, 404));
+  .get('/', async (c) => {
+    if (!(await isAuthed(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    const me = owner();
+    return c.json({ data: { count: 1, items: [{ ...me, role: 'owner' }] } });
+  })
+  .get('/:id', async (c) => {
+    if (!(await isAuthed(c))) return c.json({ code: 401, message: 'Unauthorized', data: undefined }, 401);
+    const me = owner();
+    if (c.req.param('id') !== me.id) return c.json({ code: 404, message: 'User not found', data: undefined }, 404);
+    return c.json({ data: { ...me, role: 'owner' } });
+  });
 
 // /rest/module-settings：settings.store.getModuleSettings 直接 GET，返回模块级开关配置。
 // quick-connect.options 为空数组，避免 useQuickConnect 读 moduleSettings['quick-connect'] 崩溃。

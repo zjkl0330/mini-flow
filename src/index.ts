@@ -4,8 +4,9 @@
 import { Hono } from 'hono';
 import type { Env } from './types';
 import { restApi } from './n8n/router';
+import { isAuthed } from './n8n/auth';
 import { templateProxyHandler } from './n8n/templates';
-import { sendPush } from './n8n/push';
+import { sendPush, pushSubscribeHandler } from './n8n/push';
 import { cleanupStaleLocks } from './engine/lock';
 import { listPending, purgeDeadLetter, rebuildFromDlq } from './engine/dead-letter';
 import { runScheduledWorkflows } from './engine/scheduler';
@@ -17,14 +18,10 @@ const app = new Hono<{ Bindings: Env }>();
 // 前端 editor-ui 实际请求 /rest/push（basePath=rest），故这里同时挂 /push 与 /rest/push，
 // 都转发到同一个 DO SSE 端点，避免 SPA fallback 拦截导致 "Lost connection to the server"。
 // /rest/push 必须先于 app.route('/rest', restApi) 注册，否则会被 /rest 子路由吞掉返回 404。
+// 鉴权（匿名订阅者会看到全实例执行事件）由 pushSubscribeHandler 内部完成，见 n8n/push.ts。
 const mountPush = (app: Hono<{ Bindings: Env }>) => {
-  const forward = (c: import('hono').Context<{ Bindings: Env }>) => {
-    const id = c.env.PUSH.idFromName('main');
-    const stub = c.env.PUSH.get(id);
-    return stub.fetch(new Request('https://do/push', { headers: c.req.raw.headers }));
-  };
-  app.get('/rest/push', forward);
-  app.get('/push', forward);
+  app.get('/rest/push', pushSubscribeHandler);
+  app.get('/push', pushSubscribeHandler);
 };
 mountPush(app);
 

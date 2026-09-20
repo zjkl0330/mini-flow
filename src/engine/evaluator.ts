@@ -195,6 +195,12 @@ class Parser {
     if (name === 'json' || name === '$json') return this.ctx.json;
     if (name === 'env') return this.ctx.env;
     if (name === '$now') return this.ctx.$now ?? new Date().toISOString();
+    // 字面量关键字：不支持会把 `true` 当成字段名取到 undefined，
+    // 直接导致 IF 的 `conditionSt: "true"` 恒为假（条件分支失效）。
+    if (name === 'true') return true;
+    if (name === 'false') return false;
+    if (name === 'null') return null;
+    if (name === 'undefined') return undefined;
     // 裸字段名 → 从当前 json 项取
     return getNested(this.ctx.json, name.split('.'));
   }

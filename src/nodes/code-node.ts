@@ -42,8 +42,6 @@ export const codeNode = {
 
 // 处理单个输入项：多语句赋值 / return / 单表达式
 function applyToItem(code: string, item: Record<string, any>): Record<string, any> {
-  const ctx = { json: item, env: {} };
-
   // "const/let x = expr; return expr" 形态 → 顺序求值，最后 return/末行作为输出值
   if (code.includes('return ') || /\b(const|let)\s+/.test(code)) {
     const result = runStatementBody(code, item);
@@ -74,22 +72,25 @@ function runStatementBody(code: string, item: Record<string, any>): unknown {
     if (!s) continue;
     if (s.startsWith('return')) {
       const ret = s.replace(/^return\s+/, '').trim();
-      return evalSafe(ret, { json: { ...item, ...scope }, env: {} });
+      return evalSafe(ret, { ...item, ...scope });
     }
     const m = s.match(/^(?:const|let|var)\s+([\w$]+)\s*=\s*([\s\S]+)$/);
     if (m) {
-      scope[m[1]] = evalSafe(m[2], { json: { ...item, ...scope }, env: {} });
+      scope[m[1]] = evalSafe(m[2], { ...item, ...scope });
       last = scope[m[1]];
       continue;
     }
-    last = evalSafe(s, { json: { ...item, ...scope }, env: {} });
+    last = evalSafe(s, { ...item, ...scope });
   }
   return last;
 }
 
+// 注意约定：第 2 参数是「当前数据项(json 对象)」本身，而不是 EvalContext 包裹体。
+// 历史缺陷：多语句路径曾传入 `{ json, env }` 包裹对象，导致 ctx.json 变成包裹层，
+// 语句内所有字段引用（如 `return x * 2` 中的 x）都解析为 undefined → 结果为 NaN。
 function evalSafe(code: string, item: Record<string, any>): unknown {
   const ev = safeEvaluate(code, { json: item, env: {} });
   if (ev.ok) return ev.value;
-  // 字母序兜底：原样广播并标注错误
+  // 原样广播并标注错误
   return { __codeError: ev.error };
 }

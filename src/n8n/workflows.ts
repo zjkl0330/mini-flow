@@ -8,16 +8,61 @@ import { startExecution } from '../engine/executor';
 import { sendPush } from './push';
 import { OWNER_SCOPES } from './auth';
 
+// 安全整数解析：非法输入回落默认值，越界钳制到边界（避免 NaN 进入 SQL LIMIT）
+function safeInt(raw: string | undefined, fallback: number, min: number, max: number): number {
+  const n = Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+// LIKE 通配符转义：使用户输入里的 % _ \ 按字面量匹配（配合 ESCAPE '\'）
+function escapeLike(s: string): string {
+  return s.replace(/[\\%_]/g, (m) => `\\${m}`);
+}
+
 export const workflowRoutes = new Hono<{ Bindings: Env }>()
+  // GET /rest/workflows —— 列表。支持 n8n 前端的 filter / limit / cursor / projectId，
+  // 非法参数不报错（回落到默认值），避免列表页整页失败。
   .get('/', async (c) => {
-    const projectId = c.req.query('projectId');
-    let sql = 'SELECT id, name, active, archived, project_id, updated_at, created_at FROM workflows';
-    const binds: string[] = [];
-    if (projectId) { sql += ' WHERE project_id=?'; binds.push(projectId); }
-    sql += ' ORDER BY updated_at DESC';
-    const res = await withRetry(() => c.env.DB.prepare(sql).bind(...binds).all<WorkflowRow>());
-    const rows = res.results.map((r) => ({ id: r.id, name: r.name, active: !!r.active, isArchived: !!((r as any).archived), projectId: (r as any).project_id ?? null, createdAt: r.created_at, updatedAt: r.updated_at, tags: [] }));
-    return c.json({ data: rows });
+    const q = c.req.query();
+    const limit = safeInt(q.limit, 100, 1, 250);
+    const projectId = q.projectId;
+    // n8n 前端的 filter 为 JSON 字符串：{ name, active, isArchived, projectId, tags }
+    let filter: { name?: string; active?: boolean; isArchived?: boolean; projectId?: string } = {};
+    if (q.filter) {
+      try {
+        const parsed = JSON.parse(q.filter);
+        if (parsed && typeof parsed === 'object') filter = parsed as typeof filter;
+      } catch { /* 忽略非法 filter */ }
+    }
+
+    const where: string[] = [];
+    const binds: (string | number)[] = [];
+    const proj = filter.projectId ?? projectId;
+    if (proj) { where.push('project_id=?'); binds.push(proj); }
+    if (typeof filter.name === 'string' && filter.name.trim() !== '') {
+      where.push("name LIKE ? ESCAPE '\\'");
+      binds.push(`%${escapeLike(filter.name.trim())}%`);
+    }
+    if (typeof filter.active === 'boolean') { where.push('active=?'); binds.push(filter.active ? 1 : 0); }
+    if (typeof filter.isArchived === 'boolean') { where.push('COALESCE(archived,0)=?'); binds.push(filter.isArchived ? 1 : 0); }
+    // keyset 分页：cursor 为上一页最后一个 workflow 的 id，取其 updated_at 作为水位
+    if (q.cursor) {
+      const cur = await c.env.DB.prepare('SELECT updated_at FROM workflows WHERE id=?').bind(q.cursor).first<{ updated_at: string }>();
+      if (cur?.updated_at) { where.push('updated_at < ?'); binds.push(cur.updated_at); }
+    }
+    const whereSql = where.length ? ` WHERE ${where.join(' AND ')}` : '';
+
+    const res = await withRetry(() => c.env.DB.prepare(
+      `SELECT id, name, active, archived, project_id, updated_at, created_at FROM workflows${whereSql} ORDER BY updated_at DESC LIMIT ?`,
+    ).bind(...binds, limit).all<WorkflowRow>());
+
+    const rows = (res.results ?? []).map((r) => ({
+      id: r.id, name: r.name, active: !!r.active, isArchived: !!((r as any).archived),
+      projectId: (r as any).project_id ?? null, createdAt: r.created_at, updatedAt: r.updated_at, tags: [],
+    }));
+    // n8n 工作流列表消费 response.data（数组）；同时透出 count 便于前端显示总数
+    return c.json({ data: rows, count: rows.length });
   })
   .get('/new', async (c) => {
     const id = crypto.randomUUID();

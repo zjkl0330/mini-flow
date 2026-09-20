@@ -10,6 +10,7 @@
     "gen:nodes": "tsx scripts/gen-nodes-json.ts",
     "predeploy": "tsx scripts/gen-nodes-json.ts",
     "type-check": "tsc --noEmit",
+    "test": "node scripts/run-tests.mjs",
     "db:init": "wrangler d1 execute mini-flow-db --file=schema.sql",
     "db:reset": "wrangler d1 execute mini-flow-db --file=schema.sql --local=false"
   },

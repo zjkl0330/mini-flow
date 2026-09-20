@@ -1,6 +1,12 @@
 // 内置节点执行器
 // n8n 节点 type 形如 "n8n-nodes-base.httpRequest" / "n8n-nodes-base.if" / "n8n-nodes-base.set"
 // 此处按可执行的行为分派（名称剥离前缀后映射）。
+//
+// ⚠️ 顺序敏感：resolveExecutor 取「首个命中」，故**特化模式必须排在泛化模式之前**。
+// 历史缺陷（本次修复）：
+//   泛化 /webhook/i 排在前面，导致 n8n-nodes-base.respondToWebhook 与
+//   n8n-nodes-base.webhookSend 都被解析成 webhookNode，分支响应/自定义回包节点失效。
+//   这两个特化规则已上移到泛化 /webhook/i 之前。
 
 import type { NodeExecutor } from '../types';
 
@@ -14,7 +20,7 @@ import { codeNode } from './code-node';
 import { mergeNode, splitInBatchesNode, delayNode, outputNode } from './common';
 import { filterNode, sortNode, aggregateNode, mathNode, dateTimeNode, extractJsonNode, editFieldsNode } from './transform';
 import { d1QueryNode, dbPlaceholderNode } from './db';
-import { cronNode, formTriggerNode, intervalNode, scheduleTriggerPassthroughNode } from './triggers';
+import { cronNode, formTriggerNode, intervalNode } from './triggers';
 import { openaiChatNode, aiPlaceholderNode } from './ai';
 import { textReplaceNode, regexExtractNode, textCaseNode, textSplitNode, textTemplateNode, textTruncateNode, textCountNode } from './text';
 import { limitNode, renameKeysNode, zipNode, itemListsNode, storeNode, convertToJsonNode, joinListNode, assignNode } from './util';
@@ -31,17 +37,21 @@ const stickyNoteNode: NodeExecutor = {
 // 使模板（往往带大量第三方/AI 节点）能完整跑完，而非中断到 DLQ。节点会在检查点被记录为完成。
 export const passthroughNode: NodeExecutor = stickyNoteNode;
 
-// 关键词 → 执行器。通过节点 type 的子串匹配。
+// 关键词 → 执行器。通过节点 type 的子串匹配；**首个命中生效，顺序即优先级**。
 export const nodeRegistry: Array<{ match: RegExp; executor: NodeExecutor }> = [
   { match: /manualTrigger|manual_trigger|manual-trigger/i, executor: manualTriggerNode },
   { match: /httpRequest|http_req/i, executor: httpRequestNode },
   { match: /\.set\b|\.set$|set\b/i, executor: setNode },
   { match: /\.if\b|\.if$|if\b/i, executor: ifNode },
   { match: /scheduleTrigger|scheduledTrigger|node\.schedule/i, executor: scheduleNode },
+
+  // —— Webhook 家族：两个特化规则必须在泛化 /webhook/i 之前，否则被抢占 ——
+  { match: /respondToWebhook|respond_to_webhook/i, executor: respondToWebhookNode },
+  { match: /webhook.*send|send.*webhook/i, executor: webhookSendNode },
   { match: /webhook/i, executor: webhookNode },
+
   { match: /stickyNote|sticky_note/i, executor: stickyNoteNode },
   { match: /noOp|noop|\bno-op\b/i, executor: noOpNode },
-  { match: /respondToWebhook|respond_to_webhook/i, executor: respondToWebhookNode },
   { match: /\.switch\b|node\.switch|switch/i, executor: switchNode },
   { match: /removeDuplicates|remove_duplicates/i, executor: removeDuplicatesNode },
   { match: /errorTrigger|error_trigger/i, executor: errorTriggerNode },
