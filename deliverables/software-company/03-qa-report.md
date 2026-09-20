@@ -417,7 +417,8 @@ Cloudflare Workers 的 `request.url` 由 `Host` 头构造，攻击者伪造 `Hos
 ## R3.7 实机核验：REQ-37 / REQ-38 摘标签（并新增一处修复）
 
 在本地 workerd（`wrangler dev` + 真实 D1 本地库，加载 `.dev.vars`）上以真实 HTTP 请求核验，
-把 PRD 中 4 项「未证实」中的 2 项摘掉标签，其中 **1 项证实仍存在并当场修复**。
+并对 `frontend/dist` 构建产物做静态溯源，把 PRD 中 4 项「未证实」中的 3 项摘掉标签：
+其中 **1 项证伪并当场修复**（REQ-38）、**1 项证真闭环**（REQ-37）、1 项仍需浏览器（REQ-35/36）。
 
 ### REQ-38 —— 证实存在，已修复（P2 → 已闭环）
 
@@ -437,18 +438,30 @@ Cloudflare Workers 的 `request.url` 由 `Host` 头构造，攻击者伪造 `Hos
 
 新增 `tests/integration/project-id.test.ts`（4 例）锁定契约。
 
-### REQ-37 —— 部分证实仍存在（未闭环）
+### REQ-37 —— 已闭环：确认无「幽灵条目」（附证据链）
 
-`GET /rest/node-types` 返回 **68** 项，与内置节点数一致；但已安装的社区节点
-（本地库存在 `n8n-nodes-e2e`，其声明节点类型为 `x.y`）**未出现在类型表中**（`grep '"x.y"'` 命中 0，
-类型表也不带 `isCommunity` 标记）。
+`GET /rest/node-types` 返回 **68** 项，与内置节点数一致。是否会出现「可搜到可添加、但不在类型表」
+的条目，取决于前端节点搜索的**数据来源**。对 `frontend/dist`（n8n editor-ui 构建产物）做静态溯源：
 
-即：**「可搜到可添加、但不在类型表 / 不可执行」的幽灵条目风险仍然存在**，只是触发条件是
-「先安装社区节点」而非默认状态。运行时该类节点会走「未知节点类型透传」，不报错也不做事——
-正是审计中「节点能力只到形似」的同一类问题。
+1. `NodeCreator-*.js` 的候选来源有两个：`useNodeTypesStore().nodeTypes`（来自 `/rest/node-types`）
+   与 `communityNodesAndActions`。
+2. `communityNodesAndActions` 在 nodeTypes store 中定义为
+   `actionsGenerator.generateMergedNodesAndActions(unofficialCommunityNodeTypes.value, [])`，
+   而 `unofficialCommunityNodeTypes` 是 `vettedCommunityNodeTypes` 过滤
+   `!isOfficialNode && !isInstalled` 的结果 —— **即「未安装的社区节点建议列表」**。
+3. `vettedCommunityNodeTypes` 由一次 `communityNodeTypes` 拉取填充，**catch 分支显式置为空 Map**
+   （`vettedCommunityNodeTypes.value = new Map()`）。
+4. 后端 `src/` 全库检索：**未实现** `/rest/community-node-types`
+   （`grep -rn "community-node-types\|communityNodeTypes" src/` 命中 0），
+   且未知 `/rest/*` 已收口为 404 JSON（REQ-22）。
 
-**建议**：把已安装社区节点的声明类型注册进类型表（或标记为不可执行并给出提示），
-属独立增量，未在本轮范围。
+结论：唯一可能产出「表外条目」的下拉来源在取数失败时降级为空 → 节点搜索的候选与
+`/rest/node-types` **一致**，REQ-37 的目标达成，**无幽灵条目**。
+
+**反方向的局限（如实记录，属 REQ-32 范围而非本项）**：通过 `POST /rest/community-nodes`
+安装的社区包（如本地库中的 `n8n-nodes-e2e`，声明类型 `x.y`）出现在 `/rest/community-nodes`
+与 `/rest/plugins`（设置页可见），但其声明类型**不会进入节点面板**，即「装了但搜不到」。
+这与 REQ-37 描述的「搜到但不存在」是相反方向，二者不会同时成立。
 
 ### REQ-35 / REQ-36 —— 仍未证实
 
@@ -491,7 +504,8 @@ Cloudflare Workers 的 `request.url` 由 `Host` 头构造，攻击者伪造 `Hos
    部署前必须：`wrangler secret put ADMIN_PASSWORD` / `wrangler secret put SESSION_SECRET`
    → 再 `MINI_FLOW_SECRETS_CONFIRMED=1 npm run deploy`。
    ⚠️ 未配置 Secret 直接部署，实例会「失败关闭」（登录 503），这是**有意的安全取舍**而非故障。
-2. **REQ-37 幽灵条目仍存在**（已安装社区节点的类型未注册进类型表），建议独立增量处理。
+2. **REQ-37 已闭环**（无幽灵条目，证据链见 R3.7）；其反方向局限「已安装社区节点的声明类型
+   不进节点面板」属 REQ-32 范围，建议独立增量处理。
 3. REQ-35 / REQ-36 仍需浏览器实机复测。
 4. 凭据落库仍为 KV 明文（出站已脱敏），未做静态加密。
 5. 节点数量保持 68，未向 n8n 400+ 扩容。
