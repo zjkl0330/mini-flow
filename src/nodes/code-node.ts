@@ -116,28 +116,43 @@ export const codeNode = {
       return { main: normalizeBatchResult(result, []) };
     }
 
-    // 历史「逐项变换」语义：对每个输入项独立求值，结果并入该项（output 键）
-    const outputs = inputs.map(({ json }) => ({ json: applyToItem(code, makeCtx(json)) }));
+    // 历史「逐项变换」语义：对每个输入项独立求值；若返回「数据项数组」则展开为多个 item。
+    const outputs = inputs.flatMap(({ json }) => applyToItem(code, makeCtx(json)));
     return { main: outputs };
   },
 };
 
-// 处理单个输入项（逐项变换语义）：
-//  - 返回对象（非数组）：并入当前项（对象若为 n8n item 形态 { json } 则直接取 json）
-//  - 返回标量/数组：并入当前项，值置于 output 键
+// 处理单个输入项（逐项变换语义），可产出 0..N 个输出项：
+//  - 返回「数据项数组」(元素形如 { json }) → 展开为多个 item（n8n 语义）：
+//      `return [{json:{a:1}},{json:{a:2}}]` → 2 项
+//  - 返回普通值数组（如 [1,2]）→ 维持历史：并入当前项的 output
+//  - 返回对象（非数组）：并入当前项（若为 n8n item 形态 { json } 则直接取 json）
+//  - 返回标量：并入当前项，值置于 output 键
 //  - 未返回（undefined）：原样透传当前项
-function applyToItem(code: string, ctx: EvalContext): Record<string, any> {
+//
+// 注意：只对「数据项数组」展开，是为了兼顾两点——(a) n8n 语义「返回 items 数组即多项输出」；
+// (b) 不破坏既有「字段数组值」用例（如 `return json.items;` 得到 [1,2] 时仍并入 output）。
+function applyToItem(code: string, ctx: EvalContext): Item[] {
   const item = ctx.json ?? {};
   const result = runCode(code, ctx);
-  if (result === undefined) return item;
-  if (result !== null && typeof result === 'object' && !Array.isArray(result)) {
-    const obj = result as Record<string, unknown>;
-    if ('json' in obj && obj.json !== null && typeof obj.json === 'object') {
-      return { ...(obj.json as Record<string, any>) };
-    }
-    return { ...item, ...obj };
+  if (result === undefined) return [{ json: item }];
+
+  if (Array.isArray(result)) {
+    if (result.every(isItemShape)) return result.map(toItem);
+    return [{ json: { ...item, output: result } }];
   }
-  return { ...item, output: result };
+
+  if (isPlainObject(result)) {
+    if (isItemShape(result)) return [{ json: result.json as Record<string, any> }];
+    return [{ json: { ...item, ...(result as Record<string, any>) } }];
+  }
+
+  return [{ json: { ...item, output: result } }];
+}
+
+// n8n 数据项形态：对象且含 json 子对象（{ json: {...} }）
+function isItemShape(v: unknown): v is { json: Record<string, any> } {
+  return isPlainObject(v) && 'json' in v && isPlainObject((v as Record<string, unknown>).json);
 }
 
 // 整批执行结果归一化（n8n 语义）：
@@ -240,7 +255,8 @@ class CodeEvaluationError extends Error {
       + '本实现为受限求值器（Cloudflare Workers 禁用 eval/new Function），不支持任意 JS 语句（如 for/while/function/块体箭头）。'
       + '支持：字段引用（json.x / $json.x）、算术/比较/逻辑/三目/括号、数组与对象字面量（含 ...展开）、'
       + '箭头函数 x => expr、items / $input.all()|first()|last() / $now / env，'
-      + '以及 .map|.filter|.reduce|.forEach|.find|.join|.slice|.length。',
+      + '以及 .map|.filter|.reduce|.forEach|.find|.join|.slice|.length。'
+      + '注意：不支持对象简写属性（如 { idx }），请写成 { idx: idx }。',
     );
     this.name = 'CodeEvaluationError';
   }

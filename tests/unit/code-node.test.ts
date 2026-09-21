@@ -185,3 +185,36 @@ test('Code：展开运算符后的 $input 仍识别为内置引用（`...` 不�
   assert.equal(r.ok, true, r.ok ? '' : r.error);
   assert.deepEqual(r.main, [{ json: { n: 1, a: 2, extra: true } }]);
 });
+
+// —— 派单第 4 项：逐项模式下返回「数据项数组」→ 展开为多个 item（n8n 语义） ——
+
+test('Code：逐项模式返回数据项数组 → 展开为多项（[1,2,3].map... 应产出 3 项）', async () => {
+  const r = await run('return [1, 2, 3].map(x => ({ json: { n: x } }))', [{}]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.equal(r.main.length, 3, '应产出 3 项，而非把整个数组塞进单条 output');
+  assert.deepEqual(r.main, [{ json: { n: 1 } }, { json: { n: 2 } }, { json: { n: 3 } }]);
+});
+
+test('Code：逐项模式返回数据项数组字面量 → 展开为多项', async () => {
+  const r = await run('return [{ json: { a: 1 } }, { json: { a: 2 } }]', [{}]);
+  assert.deepEqual(r.main, [{ json: { a: 1 } }, { json: { a: 2 } }]);
+});
+
+test('Code：逐项模式标量 / 字段数组值仍维持历史（并入 output，不炸成多项）', async () => {
+  const scalar = await run('return n * 2;', [{ n: 3 }]);
+  assert.equal(scalar.main.length, 1);
+  assert.equal(scalar.main[0].json.output, 6);
+
+  const fieldArr = await run('return json.items;', [{ items: [1, 2] }]);
+  assert.equal(fieldArr.main.length, 1, '普通字段数组值不得被展开成多项');
+  assert.deepEqual(fieldArr.main[0].json.output, [1, 2]);
+});
+
+// —— 派单第 5 项：不支持对象简写属性时给出正确写法提示 ——
+
+test('Code：对象简写属性不支持 → 显式失败且错误提示正确写法', async () => {
+  const r = await run('return { idx };', [{ idx: 1 }]);
+  assert.equal(r.ok, false);
+  assert.match(r.error!, /简写/);
+  assert.ok(r.error!.includes('{ idx: idx }'), '应给出正确写法示例 { idx: idx }');
+});
