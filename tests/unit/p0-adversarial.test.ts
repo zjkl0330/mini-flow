@@ -254,3 +254,162 @@ test('[QA-C9b] IF conditionSt true/false 字面量判定不变', async () => {
   assert.equal((await ifNode.execute(mk('true'))).branch, true);
   assert.equal((await ifNode.execute(mk('false'))).branch, false);
 });
+
+// ========================================================================
+// F1：内置 items/$input 引用判定必须精确（Round 2 复验 06e33d2）
+// 反例（非内置引用）→ 维持逐项变换，绝不能被误判为整批而丢项。
+// ========================================================================
+
+test('[QA-F1a] 字段访问 json.items → 逐项（不丢项，数组保留在 output）', async () => {
+  const r = await run('return json.items;', [{ items: [1, 2] }, { items: [3, 4] }, { items: [5, 6] }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.equal(r.main.length, 3, '3 输入必须 3 输出（曾被误判整批 → 仅 2 项）');
+  assert.deepEqual(r.main, [
+    { json: { items: [1, 2], output: [1, 2] } },
+    { json: { items: [3, 4], output: [3, 4] } },
+    { json: { items: [5, 6], output: [5, 6] } },
+  ]);
+});
+
+test('[QA-F1b] 字段访问 json.items（标量）→ 逐项保留每一项', async () => {
+  const r = await run('return json.items;', [{ items: 'A' }, { items: 'B' }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.equal(r.main.length, 2, '2 输入必须 2 输出（曾丢 1 项）');
+  assert.deepEqual(r.main, [{ json: { items: 'A', output: 'A' } }, { json: { items: 'B', output: 'B' } }]);
+});
+
+test('[QA-F1c] 带空格的成员访问 json . items → 逐项', async () => {
+  const r = await run('return json . items;', [{ items: [7] }, { items: [8] }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.equal(r.main.length, 2);
+  assert.deepEqual(r.main, [{ json: { items: [7], output: [7] } }, { json: { items: [8], output: [8] } }]);
+});
+
+test('[QA-F1d] 对象键 items: → 逐项（非内置引用）', async () => {
+  const r = await run('return { items: 1 };', [{ a: 9 }, { a: 8 }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.equal(r.main.length, 2, '2 输入必须 2 输出（曾被误判 → 1 项）');
+  assert.deepEqual(r.main, [{ json: { a: 9, items: 1 } }, { json: { a: 8, items: 1 } }]);
+});
+
+test('[QA-F1e] 字符串字面量含 items → 逐项（内容不参与判定）', async () => {
+  const r = await run("return 'has items here';", [{ a: 9 }, { a: 8 }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.equal(r.main.length, 2, '2 输入必须 2 输出（曾被误判 → 1 项）');
+  assert.deepEqual(r.main, [
+    { json: { a: 9, output: 'has items here' } },
+    { json: { a: 8, output: 'has items here' } },
+  ]);
+});
+
+test('[QA-F1f] $json.items 字段访问 → 逐项', async () => {
+  const r = await run('return $json.items;', [{ items: [1, 2] }, { items: [3, 4] }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.equal(r.main.length, 2);
+  assert.deepEqual(r.main, [
+    { json: { items: [1, 2], output: [1, 2] } },
+    { json: { items: [3, 4], output: [3, 4] } },
+  ]);
+});
+
+// —— 对照：真正的内置引用仍必须走整批 ——
+
+test('[QA-F1g] 真内置引用仍走整批（items / items.length / items.map / $input）', async () => {
+  const passthrough = await run('return items;', [{ a: 1 }, { b: 2 }, { c: 3 }]);
+  assert.deepEqual(passthrough.main, [{ json: { a: 1 } }, { json: { b: 2 } }, { json: { c: 3 } }]);
+
+  const len = await run('return items.length;', [{ n: 1 }, { n: 2 }, { n: 3 }]);
+  assert.equal(len.main.length, 1, 'items.length 标量 → 单输出项');
+  assert.equal(len.main[0].json.output, 3);
+
+  const mapped = await run('return items.map(i => i.json.n);', [{ n: 1 }, { n: 2 }, { n: 3 }]);
+  assert.deepEqual(mapped.main, [{ json: { output: 1 } }, { json: { output: 2 } }, { json: { output: 3 } }]);
+
+  const all = await run('return $input.all();', [{ n: 1 }, { n: 2 }]);
+  assert.deepEqual(all.main, [{ json: { n: 1 } }, { json: { n: 2 } }]);
+});
+
+test('[QA-F1h] 展开运算符 + 内置引用（工程师标记的交互点）：...$input / ...items 仍判为整批', async () => {
+  // ...$input.first().json 展开：展开符不得被当成成员访问的 `.`
+  const spreadInput = await run('return [{ json: { ...$input.first().json, extra: true } }];', [{ n: 1, a: 2 }, { n: 3 }]);
+  assert.equal(spreadInput.main.length, 1, '引用 $input → 整批单输出');
+  assert.deepEqual(spreadInput.main, [{ json: { n: 1, a: 2, extra: true } }]);
+
+  // 展开 + 后续 items 引用（同一对象内）仍判为整批
+  const spreadThenItems = await run('return [{ json: { ...$input.first().json, count: items.length } }];', [{ n: 5 }, { n: 6 }]);
+  assert.equal(spreadThenItems.ok, true, spreadThenItems.ok ? '' : spreadThenItems.error);
+  assert.deepEqual(spreadThenItems.main, [{ json: { n: 5, count: 2 } }]);
+});
+
+test('[QA-F1i] 回归护栏：{ ...i.json } 展开在 items.map 中仍逐值正确（A4b 同源）', async () => {
+  // 注：受限求值器的 || 返回布尔值（非 JS 的操作数短路），故此处不用 `n || 0`
+  const r = await run('return items.map(i => ({ json: { ...i.json, v: i.json.n + 100 } }))', [{ n: 1 }, { n: 2 }, { n: 3 }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.deepEqual(r.main, [{ json: { n: 1, v: 101 } }, { json: { n: 2, v: 102 } }, { json: { n: 3, v: 103 } }]);
+});
+
+// ========================================================================
+// F2：逐项模式「返回数据项数组 → 展开多项」语义（工作区在制变更，独立复验）
+// ========================================================================
+
+test('[QA-F2a] 数据项数组字面量 → 展开为多项', async () => {
+  const r = await run('return [{ json: { a: 1 } }, { json: { a: 2 } }]', [{}]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.deepEqual(r.main, [{ json: { a: 1 } }, { json: { a: 2 } }]);
+});
+
+test('[QA-F2b] [1,2,3].map(x => ({json:{n:x}})) → 展开 3 项', async () => {
+  const r = await run('return [1, 2, 3].map(x => ({ json: { n: x } }))', [{}]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.deepEqual(r.main, [{ json: { n: 1 } }, { json: { n: 2 } }, { json: { n: 3 } }]);
+});
+
+test('[QA-F2c] 普通值数组 / 标量 / 普通对象 / item 形态 → 历史语义不回归', async () => {
+  // 普通值数组 → 并入 output（不展开）
+  const arr = await run('return [1, 2];', [{ n: 1 }]);
+  assert.deepEqual(arr.main, [{ json: { n: 1, output: [1, 2] } }]);
+
+  // 标量 → output
+  const scalar = await run('return n * 2;', [{ n: 3 }]);
+  assert.deepEqual(scalar.main, [{ json: { n: 3, output: 6 } }]);
+
+  // 普通对象 → 并入当前项
+  const obj = await run('return { a: 1 };', [{ b: 2 }]);
+  assert.deepEqual(obj.main, [{ json: { b: 2, a: 1 } }]);
+
+  // item 形态对象 → 单输出项（取 json，丢弃输入）
+  const itemShape = await run('return { json: { a: 1 } };', [{ b: 2 }]);
+  assert.deepEqual(itemShape.main, [{ json: { a: 1 } }]);
+
+  // 非 item 对象数组 → 并入 output（不展开）
+  const objArr = await run('return [{ a: 1 }, { a: 2 }];', [{ n: 1 }]);
+  assert.deepEqual(objArr.main, [{ json: { n: 1, output: [{ a: 1 }, { a: 2 }] } }]);
+});
+
+test('[QA-F2d] 未返回（undefined）→ 原样透传当前项', async () => {
+  const r = await run('return;', [{ n: 7 }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.deepEqual(r.main, [{ json: { n: 7 } }]);
+});
+
+test('[QA-F2e] 逐项模式字段数组值不被展开（items 名当字段的兼容点）', async () => {
+  const r = await run('return json.items;', [{ items: [1, 2] }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.deepEqual(r.main, [{ json: { items: [1, 2], output: [1, 2] } }]);
+});
+
+test('[QA-F2f] 对象简写属性不支持 → 显式失败且提示正确写法', async () => {
+  const r = await run('return { idx };', [{ idx: 1 }]);
+  assert.equal(r.ok, false, '简写属性不支持，必须显式失败而非静默产出错误结果');
+  assert.match(r.error ?? '', /简写/);
+  assert.ok((r.error ?? '').includes('{ idx: idx }'), '错误信息应给出正确写法示例');
+});
+
+test('[QA-F2g] 逐项语义特征：N 输入 × M 返回数据项 → N×M 项（每项独立求值后拼接）', async () => {
+  const r = await run('return [{ json: { a: 1 } }, { json: { a: 2 } }]', [{ n: 1 }, { n: 2 }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.equal(r.main.length, 4, '2 输入各返回 2 个数据项 → 4 项（per-item 语义）');
+  assert.deepEqual(r.main, [
+    { json: { a: 1 } }, { json: { a: 2 } }, { json: { a: 1 } }, { json: { a: 2 } },
+  ]);
+});
