@@ -200,6 +200,14 @@ test('Code：逐项模式返回数据项数组字面量 → 展开为多项', as
   assert.deepEqual(r.main, [{ json: { a: 1 } }, { json: { a: 2 } }]);
 });
 
+test('Code：逐项模式返回空数组 → 不丢项（并入 output: []，而非误判数据项数组展开为 0 项）', async () => {
+  const r = await run('return [];', [{ n: 1 }, { n: 2 }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.equal(r.main.length, 2, '空数组不得被当作数据项数组（vacuous truth）展开而丢光输入');
+  assert.deepEqual(r.main[0].json.output, []);
+  assert.deepEqual(r.main[1].json.output, []);
+});
+
 test('Code：逐项模式标量 / 字段数组值仍维持历史（并入 output，不炸成多项）', async () => {
   const scalar = await run('return n * 2;', [{ n: 3 }]);
   assert.equal(scalar.main.length, 1);

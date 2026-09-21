@@ -138,7 +138,9 @@ function applyToItem(code: string, ctx: EvalContext): Item[] {
   if (result === undefined) return [{ json: item }];
 
   if (Array.isArray(result)) {
-    if (result.every(isItemShape)) return result.map(toItem);
+    // 空数组 [] 的 every() 恒为 true（vacuous truth），必须显式排除：否则会被误判为
+    // 「数据项数组」→ 展开为 0 项、**丢失全部输入**。空数组按普通值数组处理（并入 output）。
+    if (result.length > 0 && result.every(isItemShape)) return result.map(toItem);
     return [{ json: { ...item, output: result } }];
   }
 
