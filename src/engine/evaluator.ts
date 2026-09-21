@@ -1,9 +1,15 @@
 // 受限表达式求值器（替代 n8n Function 节点的 new Function）
 // Cloudflare Workers 由 CSP 硬性禁用 eval() / new Function，因此用
 // 白名单 token 分词器 + 递归下降求值器 实现安全表达式求值。
-// 支持: 字段引用(json.foo / $json.foo)、数字/字符串/布尔/数组字面量、
-//       比较(== != > >= < <=)、逻辑(&& || !)、三目、算术、括号。
-// 内置函数库见 BUILTIN_FUNCTIONS（均为可恢复/确定性实现）。
+//
+// 支持:
+//   - 字面量：数字 / 字符串 / 布尔 / null / 数组 / 对象（含展开 ...obj）
+//   - 引用：json.foo / $json.foo / env / 裸字段名 / 任意点链 (a.b.c)
+//   - 运算：算术 / 比较(== != > >= < <=) / 逻辑(&& || !) / 三目 / 括号
+//   - n8n 输入语义：items、$input.all()/first()/last()、$now、env
+//   - 箭头函数：x => expr、(...args) => expr（表达式体；用于 .map/.filter/...）
+//   - 成员方法（白名单）：map / filter / reduce / forEach / find / join / slice 等
+// 内置函数库见 BUILTIN_FUNCTIONS（均为可恢复 / 确定性实现）。
 
 import type { EvalContext } from '../types';
 
@@ -24,7 +30,11 @@ interface Token {
   value: string;
 }
 
-const SYMBOLS = new Set(['===', '!==', '==', '!=', '>=', '<=', '&&', '||', '>', '<', '+', '-', '*', '/', '!', '?', ':']);
+// 三目/二元运算符 + 箭头(=>) + 展开(...)
+const SYMBOLS = new Set([
+  '...', '===', '!==', '==', '!=', '>=', '<=', '&&', '||', '=>',
+  '>', '<', '+', '-', '*', '/', '!', '?', ':',
+]);
 const SINGLE = new Set(['(', ')', ',', '{', '}', '[', ']', '.']);
 
 function tokenize(src: string): Token[] {
@@ -71,10 +81,25 @@ function tokenize(src: string): Token[] {
   return tokens;
 }
 
+// 成员方法白名单：仅这些数组/字符串/内置对象方法可被调用。
+// 逐字节的 token 化 + 白名单，确保无法通过方法访问原型链逃逸（如 .constructor）。
+const SAFE_METHODS = new Set<string>([
+  'map', 'filter', 'reduce', 'forEach', 'find', 'some', 'every',
+  'join', 'slice', 'includes', 'indexOf', 'concat', 'split',
+  'toUpperCase', 'toLowerCase', 'trim', 'toString',
+  // $input 门面方法
+  'all', 'first', 'last',
+]);
+
 // ---------- 递归下降解析器 / 求值器 ----------
 class Parser {
   private pos = 0;
-  constructor(private tokens: Token[], private ctx: EvalContext) {}
+  constructor(
+    private tokens: Token[],
+    private ctx: EvalContext,
+    // 作用域栈：箭头函数参数绑定（从内到外查找，最后一项最内层）
+    private scopes: Array<Record<string, unknown>> = [],
+  ) {}
 
   parse(): unknown {
     const v = this.ternary();
@@ -167,17 +192,68 @@ class Parser {
       case 'number': return Number(t.value);
       case 'string': return t.value;
       case 'ident':
+        // 单参箭头： x => expr
+        if (this.isOp('=>')) return this.arrow([t.value]);
         if (this.peek()?.type === 'lparen') return this.call(t.value);
         return this.primaryIdent(t.value);
-      case 'lparen': { const v = this.ternary(); this.expect('rparen'); return this.chain(v); }
-      case 'lbracket': { const arr: unknown[] = []; if (this.peek()?.type !== 'rbracket') { arr.push(this.ternary()); while (this.peek()?.type === 'comma') { this.next(); arr.push(this.ternary()); } } this.expect('rbracket'); return this.chain(arr); }
-      case 'lbrace': { const obj: Record<string, unknown> = {}; if (this.peek()?.type !== 'rbrace') { while (true) { const k = this.next(); const key = k.type === 'string' ? k.value : k.type === 'ident' ? k.value : ''; const colon = this.next(); if (colon.type !== 'op' || colon.value !== ':') throw new EvalSyntaxError('对象缺少冒号'); const v = this.ternary(); obj[key] = v; if (this.peek()?.type === 'comma') { this.next(); continue; } break; } } this.expect('rbrace'); return obj; }
+      case 'lparen': {
+        // (a, b) => expr 或多参/零参箭头
+        const params = this.matchArrowParams();
+        if (params) return this.arrow(params);
+        const v = this.ternary(); this.expect('rparen'); return this.chain(v);
+      }
+      case 'lbracket': {
+        const arr: unknown[] = [];
+        if (this.peek()?.type !== 'rbracket') {
+          arr.push(this.ternary());
+          while (this.peek()?.type === 'comma') { this.next(); arr.push(this.ternary()); }
+        }
+        this.expect('rbracket');
+        return this.chain(arr);
+      }
+      case 'lbrace': return this.objectLiteral();
       case 'dot': { const prop = this.next(); if (prop.type !== 'ident') throw new EvalSyntaxError('点号后需为字段名'); return getPath(this.ctx, [prop.value]); }
       default: throw new EvalSyntaxError(`意外的 token: ${t.value}`);
     }
   }
 
+  // 对象字面量：{ a: 1, b: 2, ...spread }
+  private objectLiteral(): Record<string, unknown> {
+    const obj: Record<string, unknown> = {};
+    if (this.peek()?.type !== 'rbrace') {
+      while (true) {
+        const t = this.peek();
+        if (t?.type === 'op' && t.value === '...') {
+          // 展开：把来源对象的可枚举属性浅拷贝进本次对象
+          this.next();
+          const src = this.ternary();
+          if (src && typeof src === 'object' && !Array.isArray(src)) Object.assign(obj, src);
+          else if (Array.isArray(src)) Object.assign(obj, { ...src });
+        } else {
+          const k = this.next();
+          const key = k.type === 'string' ? k.value : k.type === 'ident' ? k.value : '';
+          if (!key) throw new EvalSyntaxError('非法的对象键');
+          const colon = this.next();
+          if (colon.type !== 'op' || colon.value !== ':') throw new EvalSyntaxError('对象缺少冒号');
+          obj[key] = this.ternary();
+        }
+        if (this.peek()?.type === 'comma') { this.next(); continue; }
+        break;
+      }
+    }
+    this.expect('rbrace');
+    return obj;
+  }
+
+  // 函数调用：name(arg, ...)，name 来自内置函数白名单
   private call(name: string): unknown {
+    const args = this.parseArgs();
+    const fn = lookupFunction(name);
+    if (!fn) throw new EvalSyntaxError(`未知函数: ${name}`);
+    return fn(args, this.ctx);
+  }
+
+  private parseArgs(): unknown[] {
     this.expect('lparen');
     const args: unknown[] = [];
     if (this.peek()?.type !== 'rparen') {
@@ -185,15 +261,84 @@ class Parser {
       while (this.peek()?.type === 'comma') { this.next(); args.push(this.ternary()); }
     }
     this.expect('rparen');
-    const fn = lookupFunction(name);
-    if (!fn) throw new EvalSyntaxError(`未知函数: ${name}`);
-    return fn(args, this.ctx);
+    return args;
   }
 
-  // 从上下文取值：ident 为 $json/json/env/+ 或裸字段名（支持点链访问 json.a.b）
+  // 判定从当前 pos 起是否构成箭头函数的参数表 `( (ident,)* ) =>`；
+  // 是则消费到 `=>` 之后并返回参数名，否则不移动 pos 并返回 null。
+  private matchArrowParams(): string[] | null {
+    const start = this.pos;
+    const params: string[] = [];
+    let i = start;
+    // 零参：() =>
+    if (this.tokens[i]?.type === 'rparen'
+      && this.tokens[i + 1]?.type === 'op' && this.tokens[i + 1].value === '=>') {
+      this.pos = i + 2;
+      return params;
+    }
+    for (;;) {
+      const tok = this.tokens[i];
+      if (!tok || tok.type !== 'ident') { this.pos = start; return null; }
+      params.push(tok.value);
+      i++;
+      const sep = this.tokens[i];
+      if (sep?.type === 'comma') { i++; continue; }
+      if (sep?.type === 'rparen'
+        && this.tokens[i + 1]?.type === 'op' && this.tokens[i + 1].value === '=>') {
+        this.pos = i + 2;
+        return params;
+      }
+      this.pos = start;
+      return null;
+    }
+  }
+
+  // 箭头函数：捕获函数体 token 范围，延迟到调用时以「参数作用域」重新解析。
+  // 仅支持表达式体（含 `( { ... } )` 形式的对象体）。函数体形如 `{ stmt; }` 的块体
+  // 不会被 `;` 分词，会在解析时报「意外的 token」，从而显式失败（不静默）。
+  private arrow(params: string[]): (...args: unknown[]) => unknown {
+    // 单参形态 `x =>`：此处尚未消费箭头符号；多参形态已由 matchArrowParams 消费。
+    if (this.isOp('=>')) this.next();
+    const end = this.scanBodyEnd();
+    const bodyTokens = this.tokens.slice(this.pos, end);
+    this.pos = end;
+    if (bodyTokens.length === 0) throw new EvalSyntaxError('箭头函数缺少函数体');
+    const capturedCtx = this.ctx;
+    const capturedScopes = this.scopes.slice();
+    return (...args: unknown[]) => {
+      const binding: Record<string, unknown> = {};
+      params.forEach((p, idx) => { binding[p] = args[idx]; });
+      const sub = new Parser(bodyTokens, capturedCtx, [...capturedScopes, binding]);
+      return sub.parse();
+    };
+  }
+
+  // 扫描函数体结束位置（相对 token 深度）：遇到深度 0 的 , ) ] } 即结束。
+  private scanBodyEnd(): number {
+    let depth = 0;
+    let i = this.pos;
+    while (i < this.tokens.length) {
+      const t = this.tokens[i];
+      if (t.type === 'lparen' || t.type === 'lbracket' || t.type === 'lbrace') depth++;
+      else if (t.type === 'rparen' || t.type === 'rbracket' || t.type === 'rbrace') {
+        if (depth === 0) break;
+        depth--;
+      } else if (t.type === 'comma' && depth === 0) break;
+      i++;
+    }
+    return i;
+  }
+
+  // 从上下文取值：作用域（箭头参数）→ 内置变量 → 裸字段名（支持点链访问）
   private lookup(name: string): unknown {
+    for (let i = this.scopes.length - 1; i >= 0; i--) {
+      if (Object.prototype.hasOwnProperty.call(this.scopes[i], name)) return this.scopes[i][name];
+    }
     if (name === 'json' || name === '$json') return this.ctx.json;
-    if (name === 'env') return this.ctx.env;
+    if (name === 'env' || name === '$env') return this.ctx.env;
+    // items / $input 仅在调用方显式提供 items 时暴露，避免遮蔽同名用户字段（回归防护）
+    if (name === 'items' && this.ctx.items !== undefined) return this.ctx.items;
+    if (name === '$input' && this.ctx.items !== undefined) return this.inputFacade();
     if (name === '$now') return this.ctx.$now ?? new Date().toISOString();
     // 字面量关键字：不支持会把 `true` 当成字段名取到 undefined，
     // 直接导致 IF 的 `conditionSt: "true"` 恒为假（条件分支失效）。
@@ -205,21 +350,53 @@ class Parser {
     return getNested(this.ctx.json, name.split('.'));
   }
 
-  // 支持属性链的 primary：$json.args.x / json.a.b / env.k / 裸字段 x.y.z / 任意值.field
+  // n8n $input 门面：$input.all() / first() / last() / item
+  private inputFacade(): Record<string, unknown> {
+    const items = this.ctx.items ?? [];
+    return {
+      all: () => items,
+      first: () => items[0] ?? null,
+      last: () => items[items.length - 1] ?? null,
+      item: items[0] ?? null,
+      json: this.ctx.json,
+    };
+  }
+
+  // 支持属性链的 primary：$json.args.x / json.a.b / env.k / 裸字段 x.y.z
   private primaryIdent(name: string): unknown {
     return this.chain(this.lookup(name));
   }
 
-  // 链式成员访问：x.a.b / (expr).field / [arr].length 等，点号后需为字段名
+  // 链式成员访问与方法调用：x.a.b / arr.map(fn) / $input.first().json / [arr].length
   private chain(base: unknown): unknown {
     let val = base;
     while (this.peek()?.type === 'dot') {
       this.next();
       const prop = this.next();
       if (prop.type !== 'ident') throw new EvalSyntaxError('点号后需为字段名');
-      val = val == null || typeof val !== 'object' ? undefined : (val as Record<string, unknown>)[prop.value];
+      if (this.peek()?.type === 'lparen') {
+        val = this.methodCall(val, prop.value);
+        continue;
+      }
+      val = val == null || (typeof val !== 'object' && typeof val !== 'function')
+        ? undefined
+        : (val as Record<string, unknown>)[prop.value];
     }
     return val;
+  }
+
+  private methodCall(receiver: unknown, name: string): unknown {
+    const args = this.parseArgs();
+    if (!SAFE_METHODS.has(name)) {
+      throw new EvalSyntaxError(`不支持的成员方法: .${name}()`);
+    }
+    // null/undefined 上调用：安全返回 undefined（等价可选链，避免中途抛错污染流程）
+    if (receiver == null) return undefined;
+    const fn = (receiver as Record<string, unknown>)[name];
+    if (typeof fn !== 'function') {
+      throw new EvalSyntaxError(`值上不存在方法 .${name}()`);
+    }
+    return (fn as (...a: unknown[]) => unknown).apply(receiver, args);
   }
 }
 

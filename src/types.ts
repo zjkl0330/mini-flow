@@ -63,6 +63,10 @@ export interface EvalContext {
   json?: Record<string, any>; // 当前输入项
   env?: Record<string, any>;
   $now?: string;
+  // n8n 输入语义：全部输入项（元素形如 { json: {...} }）。
+  // 仅当调用方（Code 节点）显式提供时，求值器才把 `items` / `$input` 暴露为内置变量；
+  // 普通 `{{ }}` 表达式上下文不提供该字段，从而不遮蔽同名用户字段（避免回归）。
+  items?: Array<{ json: Record<string, any> }>;
 }
 
 // Push 事件（Durable Object 门面 / Runtime 向后端推送）
