@@ -413,3 +413,19 @@ test('[QA-F2g] 逐项语义特征：N 输入 × M 返回数据项 → N×M 项�
     { json: { a: 1 } }, { json: { a: 2 } }, { json: { a: 1 } }, { json: { a: 2 } },
   ]);
 });
+
+// ========================================================================
+// F3：逐项模式空数组不得被 [].every() 空真误判 → 静默丢项（Round 2 独立发现；修复 7cc5c2c）
+// ========================================================================
+
+test('[QA-F3] 逐项模式 return [] → 不丢项（并入 output:[]，而非展开为 0 项）', async () => {
+  const r = await run('return [];', [{ a: 1 }, { a: 2 }, { a: 3 }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  // 无守卫时 [].every(isItemShape) === true → 展开为 0 项（静默丢项）；修复后应逐项保留
+  assert.equal(r.main.length, 3, '3 输入必须 3 输出（曾被空数组 every 空真误判为数据项数组 → 0 项）');
+  assert.deepEqual(r.main, [
+    { json: { a: 1, output: [] } },
+    { json: { a: 2, output: [] } },
+    { json: { a: 3, output: [] } },
+  ]);
+});
