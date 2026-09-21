@@ -23,6 +23,64 @@ function sourceOf(p: Record<string, any>): string {
   );
 }
 
+// 判定代码是否真正引用了内置变量 `items` / `$input`（用于决定「整批执行」还是「逐项变换」）。
+//
+// 反例（都不是内置引用，必须判为 false，否则会静默丢项）：
+//   - 成员访问：`json.items` / `foo.$input`
+//   - 字符串内容：`'has items here'`
+//   - 对象键位置：`{ items: 1 }` / `{ a: 1, items: 2 }`
+// 正例：`items`、`items.map(...)`、`$input.all()`、`{ v: items }`
+//
+// 实现：逐字符扫描（跳过字符串字面量），识别标识符 token，再按前一个有效字符排除成员访问，
+// 按「键位置（前为 { 或 , 且后为 :）」排除对象键。
+function usesBuiltinItems(code: string): boolean {
+  const n = code.length;
+  let i = 0;
+  let prevSig = '';
+  while (i < n) {
+    const ch = code[i];
+    // 跳过字符串字面量（整体视作一个值，内部文本不参与标识符判定）
+    if (ch === '"' || ch === "'" || ch === '`') {
+      const q = ch;
+      i++;
+      while (i < n && code[i] !== q) {
+        if (code[i] === '\\') i++;
+        i++;
+      }
+      i++; // 跳过结尾引号
+      prevSig = q;
+      continue;
+    }
+    if (/\s/.test(ch)) { i++; continue; }
+    if (/[A-Za-z_$]/.test(ch)) {
+      let j = i;
+      while (j < n && /[\w$]/.test(code[j])) j++;
+      const ident = code.slice(i, j);
+      if (ident === 'items' || ident === '$input') {
+        const isMember = prevSig === '.'; // json.items / foo.$input
+        const isObjKey = (prevSig === '{' || prevSig === ',') && nextSignificant(code, j) === ':';
+        if (!isMember && !isObjKey) return true;
+      }
+      prevSig = ident;
+      i = j;
+      continue;
+    }
+    // 展开运算符 `...` 不是成员访问：显式消费，避免紧随其后的标识符被误判为成员访问
+    // （否则 `{ ...$input.first().json }`、`{ ...items }` 会被误判为非内置引用）。
+    if (ch === '.' && code.startsWith('...', i)) { prevSig = '...'; i += 3; continue; }
+    prevSig = ch;
+    i++;
+  }
+  return false;
+}
+
+// 从 from 起跳过空白，返回下一个有效字符（无则空串）
+function nextSignificant(s: string, from: number): string {
+  let k = from;
+  while (k < s.length && /\s/.test(s[k])) k++;
+  return s[k] ?? '';
+}
+
 export const codeNode = {
   async execute(ctx: NodeExecutionContext) {
     const code = sourceOf(ctx.node.parameters).trim();
@@ -43,8 +101,11 @@ export const codeNode = {
       items: inputs,
     });
 
-    // n8n 输入语义：代码引用 items / $input 时按「整批输入」执行一次
-    if (/\bitems\b|\$input\b/.test(code)) {
+    // n8n 输入语义：仅在代码**真正引用内置变量** `items` / `$input` 时按「整批输入」执行一次。
+    // 注意：不能用裸子串/宽正则判定——`json.items`（成员访问）、`'...items...'`（字符串）、
+    // `{ items: 1 }`（对象键）都不是对内置变量的引用；误判会切到整批模式而**静默丢项**
+    // （N 个输入只保留 1 项 / 只按首项处理）。
+    if (usesBuiltinItems(code)) {
       const result = runCode(code, makeCtx(inputs[0]?.json ?? {}));
       return { main: normalizeBatchResult(result, inputs) };
     }

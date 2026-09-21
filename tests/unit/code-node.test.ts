@@ -134,3 +134,54 @@ test('Code：错误信息指出受限求值器的能力边界（可行动）', a
   assert.match(r.error!, /受限求值器/);
   assert.ok(/map/.test(r.error!) && /filter/.test(r.error!) && /reduce/.test(r.error!), '错误信息应列出支持的成员方法');
 });
+
+// —— F1（QA 独立发现）：内置 items 引用判定过宽 → 误切整批模式 → 静默丢项 ——
+// 以下写法并非引用内置变量 items，必须维持「逐项变换」：N 个输入应产出 N 项。
+
+test('Code：json.items 是成员访问，不是内置 items（3 输入应产出 3 项）', async () => {
+  const r = await run('return json.items;', [{ items: [1, 2] }, { items: [3, 4] }, { items: [5, 6] }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.equal(r.main.length, 3, '不得因误判整批而丢项');
+  assert.deepEqual(r.main[0].json.output, [1, 2]);
+  assert.deepEqual(r.main[2].json.output, [5, 6]);
+});
+
+test('Code：json.items 标量值也逐项处理（2 输入应产出 2 项）', async () => {
+  const r = await run('return json.items;', [{ items: 'A' }, { items: 'B' }]);
+  assert.equal(r.ok, true);
+  assert.equal(r.main.length, 2);
+  assert.equal(r.main[0].json.output, 'A');
+  assert.equal(r.main[1].json.output, 'B');
+});
+
+test('Code：对象键 items 不是内置引用（2 输入应产出 2 项）', async () => {
+  const r = await run('return { items: 1 };', [{ a: 1 }, { a: 2 }]);
+  assert.equal(r.ok, true);
+  assert.equal(r.main.length, 2);
+  assert.equal(r.main[0].json.items, 1);
+});
+
+test("Code：字符串内的 items 不是内置引用（2 输入应产出 2 项）", async () => {
+  const r = await run("return 'has items here';", [{ a: 1 }, { a: 2 }]);
+  assert.equal(r.ok, true);
+  assert.equal(r.main.length, 2);
+  assert.equal(r.main[0].json.output, 'has items here');
+});
+
+test('Code：对照——真正引用内置 items 仍走整批执行', async () => {
+  const passthrough = await run('return items;', [{ a: 1 }, { b: 2 }, { c: 3 }]);
+  assert.equal(passthrough.main.length, 3);
+  const mapped = await run('return items.map(i => ({ json: { v: i.json.n + 1 } }))', [{ n: 1 }, { n: 2 }]);
+  assert.deepEqual(mapped.main, [{ json: { v: 2 } }, { json: { v: 3 } }]);
+});
+
+test('Code：真正在对象值位置引用 items 仍走整批执行', async () => {
+  const r = await run('return [{ json: { n: items.length } }]', [{ n: 1 }, { n: 2 }, { n: 3 }]);
+  assert.deepEqual(r.main, [{ json: { n: 3 } }]);
+});
+
+test('Code：展开运算符后的 $input 仍识别为内置引用（`...` 不得被当作成员访问的 `.`）', async () => {
+  const r = await run('return [{ json: { ...$input.first().json, extra: true } }]', [{ n: 1, a: 2 }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.deepEqual(r.main, [{ json: { n: 1, a: 2, extra: true } }]);
+});
