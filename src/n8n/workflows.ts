@@ -3,8 +3,9 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env, N8nWorkflow } from '../types';
 import { withRetry } from '../engine/retry';
-import { parseWorkflowRow, type ExecutionRow, type WorkflowRow } from '../db/schema';
+import { parseWorkflowRow, type ExecutionRow, type NodeExecutionRow, type WorkflowRow } from '../db/schema';
 import { startExecution } from '../engine/executor';
+import { executionDetail } from './executions';
 import { sendPush } from './push';
 import { OWNER_SCOPES } from './auth';
 import { PERSONAL_PROJECT_ID } from './projects';
@@ -185,14 +186,23 @@ export const workflowRoutes = new Hono<{ Bindings: Env }>()
     return c.json({ data: { ...wf, projectId: normalizeProjectId(wf.projectId) } });
   })
   // GET /rest/workflows/:id/executions/last-successful —— 工作流卡片/编辑器展示「上次成功执行」。
+  // 前端用 `lastSuccessfulExecution` 直接喂给 `data.resultData.runData[nodeName][0].data.main[0]`
+  // 之类路径来渲染 NDV「输出」面板的「上次成功执行」数据。因此这里必须返回**完整执行详情**
+  // （含 data.resultData.runData + workflowData），而非仅摘要——否则端点虽 200，前端仍拿不到数据。
+  // 复用 executions.executionDetail()，与 GET /rest/executions/:id 保持同一形状与状态映射（completed→success）。
   .get('/:id/executions/last-successful', async (c) => {
     const id = c.req.param('id');
     try {
       const row = await c.env.DB.prepare(
-        "SELECT id, workflow_id, status, mode, started_at, finished_at FROM executions "
-        + "WHERE workflow_id=? AND status='completed' ORDER BY started_at DESC LIMIT 1",
+        "SELECT * FROM executions WHERE workflow_id=? AND status='completed' ORDER BY started_at DESC LIMIT 1",
       ).bind(id).first<ExecutionRow>();
-      return c.json({ data: row ? toExecutionSummary(row) : null });
+      if (!row) return c.json({ data: null });
+      const wfRow = await c.env.DB.prepare('SELECT * FROM workflows WHERE id=?').bind(id).first<WorkflowRow>();
+      const logs = await c.env.DB.prepare(
+        'SELECT node_name, node_type, status, retry_attempt, input_data, output_data, error_message, started_at, finished_at '
+        + 'FROM node_executions WHERE execution_id=? ORDER BY rowid ASC',
+      ).bind(row.id).all<NodeExecutionRow>();
+      return c.json({ data: executionDetail(row, wfRow ?? null, logs.results ?? []) });
     } catch { return c.json({ data: null }); }
   })
   // GET /rest/workflows/:id/execution-status —— 编辑器据此决定是否显示「运行中」指示。
@@ -363,14 +373,6 @@ function missingWorkflow(id: string): Response {
   return new Response(JSON.stringify({ code: 404, message: `Workflow not found ${id}`, data: undefined }), {
     status: 404, headers: { 'Content-Type': 'application/json' },
   });
-}
-
-// 执行摘要（供 last-successful / 卡片展示）：字段名对齐 n8n 前端读取习惯。
-function toExecutionSummary(row: Pick<ExecutionRow, 'id' | 'workflow_id' | 'status' | 'mode' | 'started_at' | 'finished_at'>) {
-  return {
-    id: row.id, workflowId: row.workflow_id, status: row.status, mode: row.mode,
-    startedAt: row.started_at, stoppedAt: row.finished_at, finished: row.status !== 'running' && row.status !== 'pending',
-  };
 }
 
 // ---- /workflows/from-url 的 SSRF 防护 ----

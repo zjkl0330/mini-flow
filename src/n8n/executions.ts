@@ -366,7 +366,8 @@ function rst(s: ExecutionRow['status']): string {
 // 构造 n8n 兼容的执行详情。
 // runData：按节点聚合 node_executions（同名节点取最后一条为最终状态），
 // 使 NDV「输出/输入」面板、表达式编辑器 $input / $(node) 都能取到数据。
-function executionDetail(r: ExecutionRow, wfRow: WorkflowRow | null, logs: NodeExecutionRow[]) {
+// 导出供 workflows 的 last-successful 端点复用（避免两处序列化逻辑漂移）。
+export function executionDetail(r: ExecutionRow, wfRow: WorkflowRow | null, logs: NodeExecutionRow[]) {
   const lastByNode = new Map<string, NodeExecutionRow>();
   for (const row of logs) lastByNode.set(row.node_name, row);
 
