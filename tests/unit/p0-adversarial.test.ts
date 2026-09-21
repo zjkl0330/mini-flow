@@ -429,3 +429,27 @@ test('[QA-F3] 逐项模式 return [] → 不丢项（并入 output:[]，而非�
     { json: { a: 3, output: [] } },
   ]);
 });
+
+// ========================================================================
+// F3 逆向护栏：锁死「F3 守卫不得越界」——整批模式 return [] 仍应为 0 项
+// ========================================================================
+
+test('[QA-F3-guard] 整批模式 return [] → 0 项（正确语义，守卫不得越界影响整批路径）', async () => {
+  // `items.length >= 0 ? [] : []` 引用内置 items → 走整批路径；整批返回 [] → 0 项。
+  // 若有人为「修 F3」去改 normalizeBatchResult，此用例会精确转红（护栏价值所在）。
+  const r = await run('return items.length >= 0 ? [] : [];', [{ a: 1 }, { b: 2 }, { c: 3 }]);
+  assert.equal(r.ok, true, r.ok ? '' : r.error);
+  assert.equal(r.main.length, 0, '整批模式返回 [] → 0 项（n8n 正确语义）');
+});
+
+test('[QA-F3-n] 逐项 return [] 输出项数恒等于输入项数（1→1、5→5）', async () => {
+  const one = await run('return [];', [{ a: 1 }]);
+  assert.equal(one.ok, true, one.ok ? '' : one.error);
+  assert.equal(one.main.length, 1, '1 输入 → 1 输出（输出数恒等于输入数）');
+  assert.deepEqual(one.main[0].json.output, []);
+
+  const five = await run('return [];', [{ a: 1 }, { a: 2 }, { a: 3 }, { a: 4 }, { a: 5 }]);
+  assert.equal(five.ok, true, five.ok ? '' : five.error);
+  assert.equal(five.main.length, 5, '5 输入 → 5 输出（输出数恒等于输入数）');
+  assert.deepEqual(five.main.map((m) => m.json.output), [[], [], [], [], []]);
+});
