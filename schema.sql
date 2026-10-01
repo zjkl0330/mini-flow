@@ -35,6 +35,8 @@ CREATE TABLE IF NOT EXISTS executions (
   locked_at TEXT,
   started_at TEXT NOT NULL DEFAULT (datetime('now')),
   finished_at TEXT,
+  retry_of TEXT,
+  retry_success_id TEXT,
   FOREIGN KEY (workflow_id) REFERENCES workflows(id)
 );
 
@@ -99,3 +101,36 @@ CREATE INDEX IF NOT EXISTS idx_executions_status ON executions(status);
 CREATE INDEX IF NOT EXISTS idx_executions_workflow ON executions(workflow_id);
 CREATE INDEX IF NOT EXISTS idx_dlq_next_retry ON dead_letter_queue(next_retry_at, status);
 CREATE INDEX IF NOT EXISTS idx_node_exec_exec ON node_executions(execution_id);
+
+-- 重试关联索引（REQ-15）
+CREATE INDEX IF NOT EXISTS idx_executions_retry_of ON executions(retry_of);
+
+-- 标签（REQ-27）
+CREATE TABLE IF NOT EXISTS tags (
+  id         TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  name       TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- 工作流 ↔ 标签 关联
+CREATE TABLE IF NOT EXISTS workflow_tags (
+  workflow_id TEXT NOT NULL,
+  tag_id      TEXT NOT NULL,
+  PRIMARY KEY (workflow_id, tag_id),
+  FOREIGN KEY (workflow_id) REFERENCES workflows(id),
+  FOREIGN KEY (tag_id) REFERENCES tags(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_tags_tag ON workflow_tags(tag_id);
+
+-- 社区节点安装登记（REQ-32；元数据级，不执行外部代码）
+CREATE TABLE IF NOT EXISTS community_nodes (
+  id           TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
+  name         TEXT NOT NULL UNIQUE,
+  display_name TEXT,
+  version      TEXT,
+  description  TEXT,
+  nodes_json   TEXT,
+  installed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

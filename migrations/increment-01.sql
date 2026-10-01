@@ -27,7 +27,6 @@ CREATE TABLE IF NOT EXISTS workflow_tags (
 
 CREATE INDEX IF NOT EXISTS idx_workflow_tags_tag ON workflow_tags(tag_id);
 
-
 -- 3) 社区节点安装登记（REQ-32；元数据级）
 CREATE TABLE IF NOT EXISTS community_nodes (
   id           TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),

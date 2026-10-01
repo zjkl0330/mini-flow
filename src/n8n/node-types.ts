@@ -23,6 +23,7 @@ export interface MiniNodeType {
   inputs: string[] | string;
   outputs: string[] | string;
   properties: unknown[];
+  credentials?: Array<{ name: string; required?: boolean }>;
 }
 
 // 节点定义统一来自插件注册中心(plugins/builtin + 任何 registerPlugin 的扩展)，

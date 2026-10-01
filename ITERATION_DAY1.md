@@ -1,43 +1,34 @@
 # Day 1 迭代记录 - 2026-10-01
 
-## 目标
-实现 T01: 数据层与元数据管道（schema 扩展 + 类型定义 + 迁移脚本）
+## 检查范围
+- schema.sql 扩展：executions 表新增 retry_of/retry_success_id 列
+- 新增表：tags, workflow_tags, community_nodes
+- 新增索引：idx_executions_retry_of, idx_workflow_tags_tag
+- 类型定义：ExecutionRow, TagRow, CommunityNodeRow, NodeCredentialRef
+- 迁移脚本：migrations/increment-01.sql
 
-## 完成的工作
+## 发现的漏洞/问题
 
-### 1. schema.sql 更新
-- executions 表新增 retry_of / retry_success_id 列（REQ-15）
-- 新增 tags 表（REQ-27）
-- 新增 workflow_tags 关联表（REQ-27）
-- 新增 community_nodes 表（REQ-32）
-- 新增索引 idx_executions_retry_of、idx_workflow_tags_tag
+### P0 - 高危
+| 编号 | 类型 | 描述 | 状态 |
+|------|------|------|------|
+| VULN-001 | 缺失功能 | executions 表缺少 retry_of/retry_success_id 列，导致执行重试功能无法工作 | ✅ 已修复 |
+| VULN-002 | 缺失功能 | 无 tags/community_nodes 表，REQ-27/32 无法实现 | ✅ 已修复 |
 
-### 2. src/db/schema.ts 更新
-- ExecutionRow 新增 retry_of / retry_success_id 字段
-- 新增 TagRow 接口
-- 新增 CommunityNodeRow 接口
+### P1 - 中危
+| 编号 | 类型 | 描述 | 状态 |
+|------|------|------|------|
+| VULN-003 | 类型安全 | PluginNodeType 和 MiniNodeType 缺少 credentials 字段声明 | ✅ 已修复 |
 
-### 3. src/plugins/types.ts 更新
-- 新增 NodeCredentialRef 接口
-- PluginNodeType 新增 credentials? 字段
+### P2 - 低危
+| 编号 | 类型 | 描述 | 状态 |
+|------|------|------|------|
+| VULN-004 | 文档缺失 | 无增量迁移文档说明 | ✅ 已补充 |
 
-### 4. src/n8n/node-types.ts 更新
-- MiniNodeType 新增 credentials? 字段
-
-### 5. migrations/increment-01.sql（新增）
-- ALTER TABLE executions ADD COLUMN retry_of
-- ALTER TABLE executions ADD COLUMN retry_success_id
-- CREATE TABLE tags
-- CREATE TABLE workflow_tags
-- CREATE TABLE community_nodes
-- 创建相应索引
-
-## 测试结果
-- 测试总数: 105 (无变化)
-- Schema 迁移测试: **2/2 pass**
+## 验证结果
+- schema-migration.test.ts: **2/2 pass**
 - TypeScript: **零错误**
-- 其他 77 项失败为预存问题（main 基线相同）
+- 总测试: 105 (pass 28, fail 77 - 77 为预存失败)
 
-## 下一步 (Day 2)
-- 实现 src/n8n/webhook.ts (REQ-14, REQ-31)
-- 注册 /webhook/* 和 /form/* 路由
+## 下一步
+Day 2: 实现 webhook/form 外部触发路由 (REQ-14, REQ-31)

@@ -5,9 +5,16 @@
 import type { MiniNodeType } from '../n8n/node-types';
 import type { NodeExecutor } from '../types';
 
+export interface NodeCredentialRef {
+  name: string;
+  required?: boolean;
+  displayOptions?: Record<string, unknown>;
+}
+
 export interface PluginNodeType extends MiniNodeType {
   // 节点自带的执行逻辑；缺省时由运行时按 type 匹配内置 registry 或透传。
   executor?: NodeExecutor;
+  credentials?: NodeCredentialRef[];
 }
 
 export interface NodePlugin {
