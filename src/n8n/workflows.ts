@@ -71,7 +71,18 @@ export const workflowRoutes = new Hono<{ Bindings: Env }>()
     ).bind(id, body.name, JSON.stringify(body.nodes ?? []), JSON.stringify(body.connections ?? {}), body.settings ? JSON.stringify(body.settings) : null, projectId).run());
     return c.json({ data: { id, name: body.name, nodes: body.nodes ?? [], connections: body.connections ?? {}, settings: body.settings, projectId: normalizeProjectId(projectId), active: false, versionId: id, checksum: await computeChecksum({ id, name: body.name, nodes: body.nodes ?? [], connections: body.connections ?? {}, settings: body.settings }), isArchived: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } }, 201);
   })
-  .get('/:id/exists', async (c) => {
+    .post('/import', async (c) => {
+    const body = await c.req.json<N8nWorkflow>();
+    const id = body.id ?? crypto.randomUUID();
+    const projectId = normalizeProjectId((body as any).projectId ?? null);
+    const now = new Date().toISOString();
+    await withRetry(() => c.env.DB.prepare(
+      "INSERT INTO workflows (id, name, nodes, connections, settings, project_id) VALUES (?,?,?,?,?,?) "
+      + "ON CONFLICT(id) DO UPDATE SET name=excluded.name, nodes=excluded.nodes, connections=excluded.connections, settings=excluded.settings, project_id=excluded.project_id, updated_at=datetime('now')"
+    ).bind(id, body.name ?? 'Imported', JSON.stringify(body.nodes ?? []), JSON.stringify(body.connections ?? {}), body.settings ? JSON.stringify(body.settings) : null, projectId).run());
+    return c.json({ data: { id, name: body.name, nodes: body.nodes ?? [], connections: body.connections ?? [], projectId, active: false, versionId: id, checksum: await computeChecksum({ id, name: body.name ?? 'Imported', nodes: body.nodes ?? [], connections: body.connections ?? {} }), isArchived: false, createdAt: now, updatedAt: now } }, 201);
+  })
+.get('/:id/exists', async (c) => {
     const id = c.req.param('id');
     const row = await withRetry(() => c.env.DB.prepare('SELECT id FROM workflows WHERE id=?').bind(id).first<WorkflowRow>());
     return c.json({ data: !!row });
