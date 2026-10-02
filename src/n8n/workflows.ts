@@ -23,7 +23,17 @@ export const workflowRoutes = new Hono<{ Bindings: Env }>()
     
     if (rawFilter) {
       try {
-        const filter = JSON.parse(rawFilter) as { projectId?: string };
+        const filter = JSON.parse(rawFilter) as { name?: string; active?: boolean; projectId?: string };
+        if (filter.name) {
+          sql += ' WHERE name LIKE ?';
+          binds.push('%' + filter.name + '%');
+        }
+        if (filter.active !== undefined) {
+          if (sql.includes('WHERE')) sql += ' AND';
+          else sql += ' WHERE';
+          sql += ' active=?';
+          binds.push(filter.active ? 1 : 0);
+        }
         if (filter.projectId) {
           if (filter.projectId === 'personal') {
             sql += ' WHERE project_id=? OR project_id IS NULL';

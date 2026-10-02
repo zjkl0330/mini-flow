@@ -32,7 +32,7 @@ export const restApi = new Hono<{ Bindings: Env }>({ strict: false })
 
 // --- 全局鉴权墙（P0-3）：除公开端点外，/rest/* 一律要求合法会话，否则 401。
 // 公开白名单仅含登录/初始化/实例 meta；其余所有读写在未登录时一律拒绝。 ---
-const OPEN_PATHS = new Set<string>(['/login', '/owner/setup', '/meta']);
+const OPEN_PATHS = new Set<string>(['/login', '/owner/setup', '/meta', '/settings', '/module-settings', '/sso', '/push']);
 restApi.use('*', async (c, next) => {
   if (c.req.method === 'OPTIONS') return next();
   // restApi 挂载在 /rest 下；c.req.url 是完整 URL(含 /rest)，而白名单按 n8n 契约(无前缀)。

@@ -33,11 +33,11 @@ export const userRoutes = new Hono<{ Bindings: Env }>()
     await (c.env.CREDENTIALS?.put(SETTINGS_KEY, JSON.stringify(merged))).catch(() => undefined);
     return c.json({ data: merged });
   })
-  .get('/', (c) => c.json({ data: [] }));
+  .get('/', (c) => c.json({ data: [{ id: 'owner', email: 'admin@example.com', firstName: 'Admin', lastName: '', role: 'owner', isOwner: true, globalScopes: [], scopes: [] }] }));
 
 // n8n 用户列表：/rest/users（复数）返回 { data: { count, items } }，侧边栏/成员列表据此读取
 export const userListRoutes = new Hono<{ Bindings: Env }>()
-  .get('/', (c) => c.json({ data: { count: 0, items: [] } }))
+  .get('/', (c) => c.json({ data: { count: 1, items: [{ id: 'owner', email: 'admin@example.com', firstName: 'Admin', lastName: '', role: 'owner', isOwner: true, globalScopes: [], scopes: [] }] } }))
   .get('/:id', (c) => c.json({ data: null, code: 404, message: 'User not found' }, 404));
 
 // /rest/module-settings：settings.store.getModuleSettings 直接 GET，返回模块级开关配置。
