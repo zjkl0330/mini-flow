@@ -22,8 +22,7 @@ export const httpRequestNode = {
 
     const body = p.sendBody === true || (p.method && p.method !== 'GET') ? JSON.stringify(fillBody(p, item)) : undefined;
 
-    // P1-5: 网络层错误必须显式抛错（DNS 失败/连接被拒/超时），
-    // 而不是吞掉后返回伪造的成功 —— 否则流程明明失败却显示 success。
+    // P1-5: 网络层错误必须显式抛错（DNS 失败/连接被拒/超时）
     let res: Response;
     try {
       res = await fetch(url, {
@@ -36,19 +35,23 @@ export const httpRequestNode = {
       throw new Error(`HTTP 请求失败: ${method} ${url} → ${msg}`);
     }
 
+    // REQ-11: 非 2xx 默认抛错（对齐 n8n）。
+    // 逃生开关: ignoreHttpStatusErrors=true 或 alwaysFailOnError=false
+    const ignoreErrors = p.ignoreHttpStatusErrors === true || p.options?.ignoreHttpStatusErrors === true;
+    const alwaysFail = p.options?.alwaysFailOnError === true || p.alwaysFailOnError === true;
+    
+    // 默认行为翻转：默认对非 2xx 抛错，除非显式开启 ignore 或明确关闭 alwaysFail
+    const shouldFailOnError = !ignoreErrors && !res.ok;
+    if (shouldFailOnError) {
+      const text = await res.text();
+      throw new Error(`HTTP ${res.status} ${res.statusText || ''}: ${text.slice(0, 400)}`);
+    }
+
     const text = await res.text();
     let parsed: unknown = text;
     try { parsed = JSON.parse(text); } catch { /* keep text */ }
 
-    // P1-6: 非 2xx 状态码可配置抛错（n8n HTTP Request "Always Fail On Error" 语义）。
-    // 通过节点参数 options.alwaysFailOnError 显式开启；默认保持兼容（返回响应供用户自行判断）。
-    const alwaysFail = p.options?.alwaysFailOnError === true || p.alwaysFailOnError === true;
-    if (alwaysFail && !res.ok) {
-      throw new Error(`HTTP ${res.status} ${res.statusText || ''}${text ? `: ${text.slice(0, 400)}` : ''}`);
-    }
-
-    // n8n 兼容输出：响应体字段合入顶层 $json（$json.args.x 可直接取），
-    // 并附加 statusCode/headers/body/json；body 与 json 均指向解析后的响应体。
+    // n8n 兼容输出
     const base = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
       ? { ...(parsed as Record<string, unknown>) }
       : {};
@@ -72,7 +75,7 @@ export function interpValue(value: unknown, item: Record<string, any>): string {
 }
 
 export function interpolate(template: string, item: Record<string, any>): string {
-  return template.replace(/\{\{\s*\$?json\.([\w.]+)\s*\}\}|{{\s*([\w.]+)\s*}}/g, (_m, a: string, b: string) => {
+  return template.replace(/\{\{\s*\$?json\.([\w.]+)\s*\}\}|\{\{\s*([\w.]+)\s*\}\}/g, (_m, a: string, b: string) => {
     const path = (a ?? b).split('.');
     const v = path.reduce((acc: any, k: string) => (acc == null ? acc : acc[k]), item);
     return v === undefined || v === null ? '' : String(v);

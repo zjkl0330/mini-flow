@@ -14,6 +14,9 @@ import { workflowRoutes } from './workflows';
 import { executionRoutes } from './executions';
 import { dlqRoutes } from './dead-letter';
 import { templatesRoutes } from './templates';
+import { insightsRoutes } from './insights';
+import { tagRoutes } from './tags';
+import { communityNodeRoutes } from './community-nodes';
 
 const SETTINGS_KEY = 'user-settings';
 async function readSettings(c: Context): Promise<Record<string, unknown>> {
@@ -124,9 +127,9 @@ restApi
   // meta：实例元信息
   .get('/meta', (c) => c.json({ data: { instanceId: 'mini-flow-instance', instanceMeta: {} } }))
   // community-nodes：社区节点清单（空）
-  .get('/community-nodes', (c) => c.json({ data: [] }))
+  .route('/community-nodes', communityNodeRoutes)
   // tags：工作流标签
-  .get('/tags', (c) => c.json({ data: [] }))
+  .route('/tags', tagRoutes)
   // 节点翻译头：defaultLocale 非 en 时路由守卫调用 getNodeTranslationHeaders
   // （GET /rest/node-translation-headers）。本精简版无节点翻译，返回空映射即可，
   // 缺失时前端 localizeNodeName 回退英文节点名。
@@ -135,6 +138,7 @@ restApi
   .get('/credential-translation', (c) => c.json({ data: null }))
   // 动态端点：角色/项目等信息由上面提供
   // 仪表盘展示激活状态：GET /rest/active-workflows
+  .route('/insights', insightsRoutes)
   .get('/active-workflows', async (c) => {
     try {
       const res = await c.env.DB.prepare('SELECT id, name, active FROM workflows WHERE active=1')

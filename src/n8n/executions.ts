@@ -58,6 +58,20 @@ export const executionRoutes = new Hono<{ Bindings: Env }>()
     return c.json({ data: executionDetail(r, wf?.name) });
   })
   // POST /rest/executions/:id/resume —— 从检查点恢复一个 paused 的执行
+  .post('/:id/retry', async (c) => {
+    const id = c.req.param('id');
+    const ex = await withRetry(() => c.env.DB.prepare('SELECT * FROM executions WHERE id=?').bind(id).first<ExecutionRow>());
+    if (!ex) return c.json({ code: 404, message: 'Execution not found', data: undefined }, 404);
+    const wf = await withRetry(() => c.env.DB.prepare('SELECT * FROM workflows WHERE id=?').bind(ex.workflow_id).first<WorkflowRow>());
+    if (!wf) return c.json({ code: 404, message: 'Workflow not found', data: undefined }, 404);
+    const workflow = parseWorkflowRow(wf);
+    const newId = crypto.randomUUID();
+    const input = ex.input_data ? JSON.parse(ex.input_data) : {};
+    await withRetry(() => c.env.DB.prepare("INSERT INTO executions (id, workflow_id, status, trigger_type, mode, input_data, retry_of, started_at) VALUES (?, ?, 'pending', ?, ?, ?, datetime('now'))").bind(newId, ex.workflow_id, ex.trigger_type, ex.mode ?? 'manual', id).run());
+    void c.env.FLOW_ENGINE.create({ id: newId, params: { workflowId: workflow.id as string, workflowName: workflow.name, nodes: workflow.nodes, connections: workflow.connections, executionId: newId, mode: ex.mode ?? 'manual', input, completedNodes: [] } });
+    await withRetry(() => c.env.DB.prepare("UPDATE executions SET status='running' WHERE id=?").bind(newId).run());
+    return c.json({ data: { executionId: newId, retryOf: id, status: 'running' } });
+  })
   .post('/:id/resume', async (c) => {
     const id = c.req.param('id');
     const r = await withRetry(() => c.env.DB.prepare('SELECT * FROM executions WHERE id=?').bind(id).first<ExecutionRow>());
