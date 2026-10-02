@@ -201,6 +201,10 @@ class Parser {
 
   // 支持属性链的 primary：$json.args.x / json.a.b / env.k / 裸字段 x.y.z / 任意值.field
   private primaryIdent(name: string): unknown {
+    if (name === 'true') return true;
+    if (name === 'false') return false;
+    if (name === 'null') return null;
+    if (name === 'undefined') return undefined;
     return this.chain(this.lookup(name));
   }
 

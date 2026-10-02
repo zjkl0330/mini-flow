@@ -67,7 +67,7 @@ export const executionRoutes = new Hono<{ Bindings: Env }>()
     const workflow = parseWorkflowRow(wf);
     const newId = crypto.randomUUID();
     const input = ex.input_data ? JSON.parse(ex.input_data) : {};
-    await withRetry(() => c.env.DB.prepare("INSERT INTO executions (id, workflow_id, status, trigger_type, mode, input_data, retry_of, started_at) VALUES (?, ?, 'pending', ?, ?, ?, datetime('now'))").bind(newId, ex.workflow_id, ex.trigger_type, ex.mode ?? 'manual', id).run());
+    await withRetry(() => c.env.DB.prepare("INSERT INTO executions (id, workflow_id, status, trigger_type, mode, input_data, retry_of, started_at) VALUES (?, ?, 'pending', ?, ?, ?, ?, datetime('now'))").bind(newId, ex.workflow_id, ex.trigger_type, ex.mode ?? 'manual', JSON.stringify(ex.input_data ?? {}), id).run());
     void c.env.FLOW_ENGINE.create({ id: newId, params: { workflowId: workflow.id as string, workflowName: workflow.name, nodes: workflow.nodes, connections: workflow.connections, executionId: newId, mode: ex.mode ?? 'manual', input, completedNodes: [] } });
     await withRetry(() => c.env.DB.prepare("UPDATE executions SET status='running' WHERE id=?").bind(newId).run());
     return c.json({ data: { executionId: newId, retryOf: id, status: 'running' } });

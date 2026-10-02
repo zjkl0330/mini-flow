@@ -38,10 +38,11 @@ export const nodeRegistry: Array<{ match: RegExp; executor: NodeExecutor }> = [
   { match: /\.set\b|\.set$|set\b/i, executor: setNode },
   { match: /\.if\b|\.if$|if\b/i, executor: ifNode },
   { match: /scheduleTrigger|scheduledTrigger|node\.schedule/i, executor: scheduleNode },
+  { match: /webhook.*send|send.*webhook/i, executor: webhookSendNode },
+  { match: /respondToWebhook|respond_to_webhook/i, executor: respondToWebhookNode },
   { match: /webhook/i, executor: webhookNode },
   { match: /stickyNote|sticky_note/i, executor: stickyNoteNode },
   { match: /noOp|noop|\bno-op\b/i, executor: noOpNode },
-  { match: /respondToWebhook|respond_to_webhook/i, executor: respondToWebhookNode },
   { match: /\.switch\b|node\.switch|switch/i, executor: switchNode },
   { match: /removeDuplicates|remove_duplicates/i, executor: removeDuplicatesNode },
   { match: /errorTrigger|error_trigger/i, executor: errorTriggerNode },
@@ -98,7 +99,6 @@ export const nodeRegistry: Array<{ match: RegExp; executor: NodeExecutor }> = [
   { match: /httpSend|http_request.*send|genericSend/i, executor: httpSendNode },
   { match: /telegramChannel|telegram.*channel|fetchChannel|node\.telegram/i, executor: telegramChannelNode },
   { match: /sendgrid|email|mail|slack|telegram|discord|whatsapp|sms|mailchimp/i, executor: notifyPlaceholderNode },
-  { match: /webhook.*send|send.*webhook/i, executor: webhookSendNode },
 
   // 消息自动化（企业微信 / 翻译）
   { match: /weWork|weCom|we_work|qyapi|corp.*wechat|flag.*wei_xin|enterpriseWechat/i, executor: weComSendNode },

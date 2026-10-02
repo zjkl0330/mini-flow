@@ -1,6 +1,4 @@
-// dag: 把 n8n workflow JSON 编译为可执行的步骤序列（含条件分支）
-// n8n connections 形态: { [from]: { main: [ [ {node: toName} ], [ ] ] } }
-// main[0] = true/主线, main[1] = IF 的 false 分支
+// dag: compile n8n workflow JSON into executable step sequence (with conditional branches)
 import type { N8nWorkflow, N8nNode } from '../types';
 
 export interface Step {
@@ -10,20 +8,48 @@ export interface Step {
 
 export interface DagGraph {
   steps: Step[];
-  // 从节点名 → 其下游 [(目标节点名, 分支index?)]
   edges: Map<string, Array<{ to: string; branch: number }>>;
-  // 入口节点（无上游）
   entry: N8nNode | null;
-  // 出边为条件分支的节点（其下游需要按分支 index 定向）
 }
 
+const TRIGGER_TYPES = new Set([
+  'n8n-nodes-base.manualTrigger',
+  'n8n-nodes-base.scheduleTrigger',
+  'n8n-nodes-base.cron',
+  'n8n-nodes-base.formTrigger',
+  'n8n-nodes-base.intervalTrigger',
+]);
+
+const STICKY_TYPES = new Set(['n8n-nodes-base.stickyNote']);
+
 export function compileWorkflow(workflow: N8nWorkflow): DagGraph {
-  // 归一化：缺失 name 的节点用 type(位置索引) 兜底，避免整条链 key 变成 "undefined"
-  const raw = workflow.nodes.filter((n) => !n.disabled).map((n, i) => ({ ...n, name: n.name || n.name === '' ? n.name : `node_${i}_${n.type.split('.').pop() ?? 'n'}` }));
+  // Normalize: empty/missing names get index+type fallback
+  const origNodes = workflow.nodes.filter((n) => !n.disabled);
+  const raw: N8nNode[] = origNodes.map((n, i) => ({
+    ...n,
+    name: n.name ? n.name : `node_${i}_${n.type.split('.').pop() ?? 'n'}`,
+  }));
+
+  // id -> name mapping (connections may reference by id)
   const nameById = new Map<string, string>();
-  for (const n of raw) if (n.id) nameById.set(n.id, n.name);
-  // 让 connections 里的目标（可能是 id 或 name）与节点 name 对齐
-  const connKey = (key: string) => (nameById.has(key) ? nameById.get(key)! : key);
+  for (const n of raw) {
+    if (n.id) nameById.set(n.id, n.name);
+  }
+  // original empty-name -> fallback name (connections may use '' as ref)
+  const emptyToFallback = new Map<string, string>();
+  for (let i = 0; i < origNodes.length; i++) {
+    const orig = origNodes[i];
+    if (!orig.name || orig.name === '') {
+      emptyToFallback.set('', raw[i].name);
+    }
+  }
+
+  const connKey = (key: string) => {
+    if (nameById.has(key)) return nameById.get(key)!;
+    if (emptyToFallback.has(key)) return emptyToFallback.get(key)!;
+    return key;
+  };
+
   const nodes = raw;
   const edges = new Map<string, Array<{ to: string; branch: number }>>();
   const inDegree = new Map<string, number>();
@@ -44,16 +70,23 @@ export function compileWorkflow(workflow: N8nWorkflow): DagGraph {
     }
   }
 
-  // 入口节点：入度 0 的第一个节点（须在 Kahn 变异 inDegree 之前计算，否则不可靠）
+  // Entry: in-degree 0, prefer trigger types, skip sticky notes
   let entryNode: N8nNode | null = null;
   for (const n of nodes) {
-    if ((inDegree.get(n.name) ?? 0) === 0) {
+    if ((inDegree.get(n.name) ?? 0) === 0 && TRIGGER_TYPES.has(n.type)) {
       entryNode = n; break;
     }
   }
+  if (!entryNode) {
+    for (const n of nodes) {
+      if ((inDegree.get(n.name) ?? 0) === 0 && !STICKY_TYPES.has(n.type)) {
+        entryNode = n; break;
+      }
+    }
+  }
 
-  // Kahn 拓扑排序（稳定顺序：按原数组顺序出队）
-  const queue = nodes.filter((n) => (inDegree.get(n.name) ?? 0) === 0);
+  // Kahn topological sort, skip sticky notes
+  const queue = nodes.filter((n) => (inDegree.get(n.name) ?? 0) === 0 && !STICKY_TYPES.has(n.type));
   const steps: Step[] = [];
   const visited = new Set<string>();
   let order = 0;
@@ -67,7 +100,7 @@ export function compileWorkflow(workflow: N8nWorkflow): DagGraph {
       inDegree.set(e.to, deg);
       if (deg === 0) {
         const t = nodes.find((n) => n.name === e.to);
-        if (t) queue.push(t);
+        if (t && !STICKY_TYPES.has(t.type)) queue.push(t);
       }
     }
   }
