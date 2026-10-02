@@ -112,6 +112,24 @@ async function checkLogin(env: Env, email: unknown, password: unknown): Promise<
   return constantTimeEqual(pwdOf(env), password);
 }
 
+
+// SEC-1: 凭据解析守卫
+export type Credentials = { email: string; password: string; usingFallback: boolean } | null;
+export function resolveCredentials(env: Env): Credentials {
+  const pwd = String((env as any).ADMIN_PASSWORD ?? '');
+  const secret = String((env as any).SESSION_SECRET ?? '');
+  const envVar = String((env as any).ENVIRONMENT ?? '').toLowerCase();
+  const isDevEnv = ['dev', 'development', 'local'].includes(envVar);
+  const isProdEnv = ['production', 'prod', 'staging'].includes(envVar);
+  if (pwd) {
+    if (pwd.length < 8 || secret.length < 16) return null;
+    const isFallback = pwd === 'mini-flow-demo-password';
+    if (isFallback && isProdEnv) return null;
+    return { email: OWNER_EMAIL, password: pwd, usingFallback: isFallback };
+  }
+  if (isDevEnv) return { email: OWNER_EMAIL, password: 'mini-flow-demo-password', usingFallback: true };
+  return null;
+}
 export const authRoutes = new Hono<{ Bindings: Env }>()
   // 首次 setup（可选）：n8n 首启初始化 owner；本单用户实现直接返回现有 owner。
   .post('/owner/setup', async (c) => {
@@ -124,6 +142,11 @@ export const authRoutes = new Hono<{ Bindings: Env }>()
   })
   // 登录：校验密码 → 签发签名令牌写入 HttpOnly Cookie
   .post('/login', async (c) => {
+        // SEC-1: 检查凭据是否配置
+    const creds = resolveCredentials(c.env);
+    if (!creds) {
+      return c.json({ code: 503, message: 'ADMIN_PASSWORD not configured. Set it via wrangler secret put ADMIN_PASSWORD', data: undefined }, 503);
+    }
     const body = await c.req.json<{ email?: string; password?: string }>().catch(() => ({} as { email?: string; password?: string }));
     if (!(await checkLogin(c.env, body?.email, body?.password))) {
       return c.json({ code: 401, message: 'Invalid email or password', data: undefined }, 401);

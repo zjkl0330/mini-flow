@@ -5,6 +5,9 @@ import type { Context } from 'hono';
 import type { Env } from '../types';
 import { withRetry } from '../engine/retry';
 
+// REQ-38: 个人项目 ID 常量
+export const PERSONAL_PROJECT_ID = 'personal';
+
 export interface ProjectRow {
   id: string;
   name: string;

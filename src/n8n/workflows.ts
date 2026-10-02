@@ -8,21 +8,49 @@ import { startExecution } from '../engine/executor';
 import { sendPush } from './push';
 import { OWNER_SCOPES } from './auth';
 
+// REQ-38: 归一化 projectId，null/empty 统一为 personal
+export function normalizeProjectId(id: string | null | undefined): string {
+  if (!id || id.trim() === '') return 'personal';
+  return id;
+}
+
 export const workflowRoutes = new Hono<{ Bindings: Env }>()
-  .get('/', async (c) => {
+    .get('/', async (c) => {
     const projectId = c.req.query('projectId');
+    const rawFilter = c.req.query('filter');
     let sql = 'SELECT id, name, active, archived, project_id, updated_at, created_at FROM workflows';
     const binds: string[] = [];
-    if (projectId) { sql += ' WHERE project_id=?'; binds.push(projectId); }
+    
+    if (rawFilter) {
+      try {
+        const filter = JSON.parse(rawFilter) as { projectId?: string };
+        if (filter.projectId) {
+          if (filter.projectId === 'personal') {
+            sql += ' WHERE project_id=? OR project_id IS NULL';
+            binds.push(filter.projectId);
+          } else {
+            sql += ' WHERE project_id=?';
+            binds.push(filter.projectId);
+          }
+        }
+      } catch { }
+    } else if (projectId) {
+      if (projectId === 'personal') {
+        sql += ' WHERE project_id=? OR project_id IS NULL';
+        binds.push(projectId);
+      } else {
+        sql += ' WHERE project_id=?';
+        binds.push(projectId);
+      }
+    }
     sql += ' ORDER BY updated_at DESC';
     const res = await withRetry(() => c.env.DB.prepare(sql).bind(...binds).all<WorkflowRow>());
-    const rows = res.results.map((r) => ({ id: r.id, name: r.name, active: !!r.active, isArchived: !!((r as any).archived), projectId: (r as any).project_id ?? null, createdAt: r.created_at, updatedAt: r.updated_at, tags: [] }));
+    const rows = res.results.map((r) => ({ id: r.id, name: r.name, active: !!r.active, isArchived: !!((r as any).archived), projectId: normalizeProjectId((r as any).project_id), createdAt: r.created_at, updatedAt: r.updated_at, tags: [] }));
     return c.json({ data: rows });
-  })
-  .get('/new', async (c) => {
+  }).get('/new', async (c) => {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    return c.json({ data: { id, name: 'Untitled workflow', nodes: [], connections: {}, active: false, settings: {}, projectId: null, versionId: id, checksum: await computeChecksum({ id, name: 'Untitled workflow' }), isArchived: false, createdAt: now, updatedAt: now } });
+    return c.json({ data: { id, name: 'Untitled workflow', nodes: [], connections: {}, active: false, settings: {}, projectId: normalizeProjectId(null), versionId: id, checksum: await computeChecksum({ id, name: 'Untitled workflow' }), isArchived: false, createdAt: now, updatedAt: now } });
   })
   // 前端在创建新工作流时 POST /workflows/new 取得默认工作流与 id（Vue route 预取）。
   // 与 GET 等价；enabled:true 标记该 id 可编辑，前端据此进入画布。
@@ -41,7 +69,7 @@ export const workflowRoutes = new Hono<{ Bindings: Env }>()
       + "name=excluded.name, nodes=excluded.nodes, connections=excluded.connections, "
       + "settings=excluded.settings, project_id=excluded.project_id, updated_at=datetime('now')",
     ).bind(id, body.name, JSON.stringify(body.nodes ?? []), JSON.stringify(body.connections ?? {}), body.settings ? JSON.stringify(body.settings) : null, projectId).run());
-    return c.json({ data: { id, name: body.name, nodes: body.nodes ?? [], connections: body.connections ?? {}, settings: body.settings, projectId, active: false, versionId: id, checksum: await computeChecksum({ id, name: body.name, nodes: body.nodes ?? [], connections: body.connections ?? {}, settings: body.settings }), isArchived: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } }, 201);
+    return c.json({ data: { id, name: body.name, nodes: body.nodes ?? [], connections: body.connections ?? {}, settings: body.settings, projectId: normalizeProjectId(projectId), active: false, versionId: id, checksum: await computeChecksum({ id, name: body.name, nodes: body.nodes ?? [], connections: body.connections ?? {}, settings: body.settings }), isArchived: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() } }, 201);
   })
   .get('/:id/exists', async (c) => {
     const id = c.req.param('id');
@@ -133,7 +161,7 @@ export async function newWorkflowHandler(c: Context<{ Bindings: Env }>) {
   } catch { /* 空 body 或无 JSON → 忽略，用 null */ }
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  return c.json({ data: { id, name: 'Untitled workflow', nodes: [], connections: {}, active: false, settings: {}, projectId, enabled: true, versionId: id, checksum: await computeChecksum({ id, name: 'Untitled workflow' }), isArchived: false, createdAt: now, updatedAt: now } });
+  return c.json({ data: { id, name: 'Untitled workflow', nodes: [], connections: {}, active: false, settings: {}, projectId: normalizeProjectId(projectId), enabled: true, versionId: id, checksum: await computeChecksum({ id, name: 'Untitled workflow' }), isArchived: false, createdAt: now, updatedAt: now } });
 }
 
 async function withWorkflow(
@@ -183,7 +211,7 @@ async function updateWorkflowHandler(c: Context<{ Bindings: Env }>, id: string) 
     nodes: body.nodes ?? (row ? JSON.parse(row.nodes ?? '[]') : []),
     connections: body.connections ?? (row ? JSON.parse(row.connections ?? '{}') : {}),
     settings: body.settings ?? (row?.settings ? JSON.parse(row.settings) : undefined),
-    projectId: proj, active: !!active,
+    projectId: normalizeProjectId(proj), active: !!active,
   };
   return c.json({ data: await toResponse(merged) });
 }
@@ -214,7 +242,7 @@ async function computeChecksum(wf: { id: string; name?: string; nodes?: unknown[
 async function toResponse(wf: any) {
   return {
     id: wf.id, name: wf.name, nodes: wf.nodes, connections: wf.connections, settings: wf.settings,
-    projectId: wf.projectId ?? null,
+    projectId: normalizeProjectId(wf.projectId),
     active: !!wf.active,
     isArchived: !!(wf as any).isArchived,
     versionId: wf.id,
