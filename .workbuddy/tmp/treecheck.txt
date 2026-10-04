@@ -1,0 +1,6 @@
+=== git diff --stat ===
+warning: in the working copy of 'deliverables/software-company/03-qa-report.md', LF will be replaced by CRLF the next time Git touches it
+ deliverables/software-company/03-qa-report.md | 104 ++++++++++++++++++++++++++
+ 1 file changed, 104 insertions(+)
+=== git status -s ===
+ M deliverables/software-company/03-qa-report.md

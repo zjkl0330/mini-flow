@@ -1,0 +1,126 @@
+// 内置节点执行器
+// n8n 节点 type 形如 "n8n-nodes-base.httpRequest" / "n8n-nodes-base.if" / "n8n-nodes-base.set"
+// 此处按可执行的行为分派（名称剥离前缀后映射）。
+//
+// ⚠️ 顺序敏感：resolveExecutor 取「首个命中」，故**特化模式必须排在泛化模式之前**。
+// 历史缺陷（本次修复）：
+//   泛化 /webhook/i 排在前面，导致 n8n-nodes-base.respondToWebhook 与
+//   n8n-nodes-base.webhookSend 都被解析成 webhookNode，分支响应/自定义回包节点失效。
+//   这两个特化规则已上移到泛化 /webhook/i 之前。
+
+import type { NodeExecutor } from '../types';
+
+import { httpRequestNode } from './http-request';
+import { setNode, ifNode } from './if-condition';
+import { scheduleNode, webhookNode, manualTriggerNode } from './webhook';
+import {
+  noOpNode, errorTriggerNode, respondToWebhookNode, switchNode, removeDuplicatesNode, textSplitterNode,
+} from './logic';
+import { codeNode } from './code-node';
+import { mergeNode, splitInBatchesNode, delayNode, outputNode } from './common';
+import { filterNode, sortNode, aggregateNode, mathNode, dateTimeNode, extractJsonNode, editFieldsNode } from './transform';
+import { d1QueryNode, dbPlaceholderNode } from './db';
+import { cronNode, formTriggerNode, intervalNode } from './triggers';
+import { openaiChatNode, aiPlaceholderNode } from './ai';
+import { textReplaceNode, regexExtractNode, textCaseNode, textSplitNode, textTemplateNode, textTruncateNode, textCountNode } from './text';
+import { limitNode, renameKeysNode, zipNode, itemListsNode, storeNode, convertToJsonNode, joinListNode, assignNode } from './util';
+import { httpSendNode, notifyPlaceholderNode, webhookSendNode } from './notify';
+import { telegramChannelNode } from './telegram';
+import { weComSendNode, translateNode } from './messaging';
+
+// stickyNote：画布便签，无逻辑。作为 no-op 透传输入，避免模板内的便签节点中断执行。
+const stickyNoteNode: NodeExecutor = {
+  execute: async (ctx) => (ctx.inputData?.main?.length ? { main: ctx.inputData.main } : { main: [{ json: {} }] }),
+};
+
+// passthrough：未知/未实现的节点类型。不做真实逻辑，仅把合并后的上游输入原样向下传递，
+// 使模板（往往带大量第三方/AI 节点）能完整跑完，而非中断到 DLQ。节点会在检查点被记录为完成。
+export const passthroughNode: NodeExecutor = stickyNoteNode;
+
+// 关键词 → 执行器。通过节点 type 的子串匹配；**首个命中生效，顺序即优先级**。
+export const nodeRegistry: Array<{ match: RegExp; executor: NodeExecutor }> = [
+  { match: /manualTrigger|manual_trigger|manual-trigger/i, executor: manualTriggerNode },
+  { match: /httpRequest|http_req/i, executor: httpRequestNode },
+  { match: /\.set\b|\.set$|set\b/i, executor: setNode },
+  { match: /\.if\b|\.if$|if\b/i, executor: ifNode },
+  { match: /scheduleTrigger|scheduledTrigger|node\.schedule/i, executor: scheduleNode },
+
+  // —— Webhook 家族：两个特化规则必须在泛化 /webhook/i 之前，否则被抢占 ——
+  { match: /respondToWebhook|respond_to_webhook/i, executor: respondToWebhookNode },
+  { match: /webhook.*send|send.*webhook/i, executor: webhookSendNode },
+  { match: /webhook/i, executor: webhookNode },
+
+  { match: /stickyNote|sticky_note/i, executor: stickyNoteNode },
+  { match: /noOp|noop|\bno-op\b/i, executor: noOpNode },
+  { match: /\.switch\b|node\.switch|switch/i, executor: switchNode },
+  { match: /removeDuplicates|remove_duplicates/i, executor: removeDuplicatesNode },
+  { match: /errorTrigger|error_trigger/i, executor: errorTriggerNode },
+  { match: /textSplitterRecursiveCharacterTextSplitter|recursiveCharacterTextSplitter/i, executor: textSplitterNode },
+  { match: /\.code\b|\.code$|node\.code/i, executor: codeNode },
+  { match: /function|\.fn\b|Function/i, executor: codeNode },
+  { match: /node\.merge|\.merge\b|merge/i, executor: mergeNode },
+  { match: /splitInBatches|split_in_batches|splitInBatch/i, executor: splitInBatchesNode },
+  { match: /node\.delay|\.delay\b|delay/i, executor: delayNode },
+  { match: /outputNode|node\.output|\.output\b/i, executor: outputNode },
+  { match: /node\.filter|\.filter\b|filter/i, executor: filterNode },
+  { match: /node\.sort|\.sort\b/i, executor: sortNode },
+  { match: /node\.aggregate|\.aggregate\b|aggregation/i, executor: aggregateNode },
+  { match: /node\.math|\.math\b|math/i, executor: mathNode },
+  { match: /dateTime|date_time|node\.date/i, executor: dateTimeNode },
+  { match: /extractFromFile|extractFromJson|extract.*json/i, executor: extractJsonNode },
+  { match: /editFields|edit_fields|node\.set\b|node\.editFields/i, executor: editFieldsNode },
+
+  // 数据库
+  { match: /node\.d1|d1query|n8n-nodes-base\.d1/i, executor: d1QueryNode },
+  { match: /mySql|mysql|node\.my_sql/i, executor: dbPlaceholderNode },
+  { match: /postgres|postgresql/i, executor: dbPlaceholderNode },
+  { match: /sqlite/i, executor: d1QueryNode },
+
+  // 触发器补充
+  { match: /node\.cron|cron/i, executor: cronNode },
+  { match: /formTrigger|form_trigger|node\.form/i, executor: formTriggerNode },
+  { match: /intervalTrigger|interval/i, executor: intervalNode },
+
+  // AI
+  { match: /openAi|openai|open_ai|chat/i, executor: openaiChatNode },
+  { match: /embeddings|huggingface|hugging_face|langchain|llm|aiTransform|openai/i, executor: aiPlaceholderNode },
+
+  // 文本处理
+  { match: /^.*\.replace\b|textReplace|replace.*text/i, executor: textReplaceNode },
+  { match: /regexExtract|regex.*extract|extract.*regex/i, executor: regexExtractNode },
+  { match: /textCase|case.*text|changeCase|toUpperCase|toLowerCase/i, executor: textCaseNode },
+  { match: /^.*splitOut|textSplit|split.*text/i, executor: textSplitNode },
+  { match: /textTemplate|template.*text/i, executor: textTemplateNode },
+  { match: /truncate|textTruncate/i, executor: textTruncateNode },
+  { match: /textCount|charactersCounter/i, executor: textCountNode },
+
+  // 列表/数据工具
+  { match: /limit/i, executor: limitNode },
+  { match: /renameKeys|rename_keys|rename.*field/i, executor: renameKeysNode },
+  { match: /^.*zip$/i, executor: zipNode },
+  { match: /itemLists|item_lists|flatten/i, executor: itemListsNode },
+  { match: /node\.store|n8n-nodes.redis|kv|keyValue|storage|store/i, executor: storeNode },
+  { match: /convertToJson|convert.*json|stringify|parseJson/i, executor: convertToJsonNode },
+  { match: /itemList.*join|join.*item|aggregate.*item/i, executor: joinListNode },
+  { match: /node\.assign|assign|variables/i, executor: assignNode },
+
+  // 通讯
+  { match: /httpSend|http_request.*send|genericSend/i, executor: httpSendNode },
+  { match: /telegramChannel|telegram.*channel|fetchChannel|node\.telegram/i, executor: telegramChannelNode },
+  { match: /sendgrid|email|mail|slack|telegram|discord|whatsapp|sms|mailchimp/i, executor: notifyPlaceholderNode },
+  { match: /webhook.*send|send.*webhook/i, executor: webhookSendNode },
+
+  // 消息自动化（企业微信 / 翻译）
+  { match: /weWork|weCom|we_work|qyapi|corp.*wechat|flag.*wei_xin|enterpriseWechat/i, executor: weComSendNode },
+  { match: /^.*translate|node\.translate|translate/i, executor: translateNode },
+];
+
+// 兜底：未知节点 → 返回 passthrough（透传），保证模板执行不中断。
+export function resolveExecutor(nodeType: string): NodeExecutor | null {
+  for (const r of nodeRegistry) {
+    if (r.match.test(nodeType)) return r.executor;
+  }
+  return passthroughNode;
+}
+
+export { httpRequestNode, setNode, ifNode, scheduleNode, webhookNode };

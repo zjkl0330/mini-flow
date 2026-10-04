@@ -1,0 +1,62 @@
+== DEF-1 renameKeys ==
+  PASS fixedCollection 不抛错且改名
+  PASS legacy renaming[] 不抛错且改名
+  PASS legacy renameKeys[] 不抛错且改名
+  PASS renaming:"abc"(畸形) 不崩溃且原样透传
+  PASS renaming:null(畸形) 不崩溃且原样透传
+  PASS renaming:123(畸形) 不崩溃且原样透传
+== DEF-2 aggregate.fields ==
+  PASS json 字符串生效(sum=30)
+  PASS 已解析数组仍生效(不回归)
+  PASS 非法 JSON 不崩溃(安全降级)
+== DEF-3 editFields.fields ==
+  PASS json 字符串生效(x=1)
+  PASS 已解析数组仍生效
+  PASS 非法 JSON 不崩溃
+== DEF-4 assign.assignments ==
+  PASS json 字符串生效(y=9)
+  PASS 已解析数组仍生效
+  PASS 非法 JSON 不崩溃
+== DEF-5 dateTime.additionalFields.add ==
+  PASS json 字符串生效(+1天)
+  PASS 已解析对象仍生效
+  PASS 非法 JSON 不崩溃(不减)
+  PASS additionalFields 整体字符串也可解析(+2天)
+== asJsonArray / asJsonRecord 边界 ==
+  PASS asJsonArray([1,2])
+  PASS asJsonArray("[1,2]")
+  PASS asJsonArray("")
+  PASS asJsonArray("   ")
+  PASS asJsonArray("{oops")
+  PASS asJsonArray("1")
+  PASS asJsonArray("\"s\"")
+  PASS asJsonArray("true")
+  PASS asJsonArray("null")
+  PASS asJsonArray("null")
+  PASS asJsonArray(null)
+  PASS asJsonArray(undefined)
+  PASS asJsonArray(123)
+  PASS asJsonArray({})
+  PASS asJsonArray("{\"a\":1}")
+  PASS asJsonArray("[[1],[2]]")
+  PASS asJsonRecord({"a":1})
+  PASS asJsonRecord("{\"a\":1}")
+  PASS asJsonRecord("[1,2]")
+  PASS asJsonRecord("1")
+  PASS asJsonRecord("")
+  PASS asJsonRecord("{oops")
+  PASS asJsonRecord("null")
+  PASS asJsonRecord(null)
+  PASS asJsonRecord(undefined)
+  PASS asJsonRecord("true")
+  PASS asJsonRecord([1])
+== L-1 set.keepOnlySet 行为回归 ==
+  PASS keepOnlySet:true 仅保留写入字段
+  PASS 默认(false) 等价于修复前：保留原字段并合并写入
+  PASS keepOnlySet:false 同默认
+== L-2 respondToWebhook.respondWith ==
+  PASS text 模式 → {text:首个输入项.text}
+  PASS 默认(allIncomingItems) → 原样透传（与修复前一致）
+  PASS json 模式 → 原样透传（与修复前一致）
+
+SUMMARY pass=52 fail=0

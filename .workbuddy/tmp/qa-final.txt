@@ -1,0 +1,5 @@
+== STATUS ==
+== HEAD ==
+f496b6a test(qa): 补 F3 回归——逐项模式 return [] 不丢项
+7cc5c2c fix(code): 逐项模式空数组 [] 不再被 every 误判为数据项数组而丢项（QA F3）
+a1224a9 test(qa): Round2 独立复验——F1 修复 + 数据项数组展开语义

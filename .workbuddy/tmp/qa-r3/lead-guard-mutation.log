@@ -1,0 +1,252 @@
+TAP version 13
+# Subtest: [QA-A1] 多输入(3项) items.map + 展开 → 恰好 3 项且逐项值正确（防 N×N）
+ok 1 - [QA-A1] 多输入(3项) items.map + 展开 → 恰好 3 项且逐项值正确（防 N×N）
+  ---
+  duration_ms: 14.8632
+  type: 'test'
+  ...
+# Subtest: [QA-A1b] 多输入(5项) items.map 不展开 → 恰好 5 项
+ok 2 - [QA-A1b] 多输入(5项) items.map 不展开 → 恰好 5 项
+  ---
+  duration_ms: 1.1482
+  type: 'test'
+  ...
+# Subtest: [QA-A1c] 输入项本身含 items 字段时，items.map 仍映射引擎全集而非字段
+ok 3 - [QA-A1c] 输入项本身含 items 字段时，items.map 仍映射引擎全集而非字段
+  ---
+  duration_ms: 0.8545
+  type: 'test'
+  ...
+# Subtest: [QA-A2] return items 原样透传（3 项）
+ok 4 - [QA-A2] return items 原样透传（3 项）
+  ---
+  duration_ms: 0.4902
+  type: 'test'
+  ...
+# Subtest: [QA-A2b] return $json（面板默认值）逐项可用
+ok 5 - [QA-A2b] return $json（面板默认值）逐项可用
+  ---
+  duration_ms: 0.8092
+  type: 'test'
+  ...
+# Subtest: [QA-A3] items.filter / items.reduce / $input.first().json.x 真实可用
+ok 6 - [QA-A3] items.filter / items.reduce / $input.first().json.x 真实可用
+  ---
+  duration_ms: 1.7055
+  type: 'test'
+  ...
+# Subtest: [QA-A4] 多参 lambda (i, idx) => ... 传入序号正确
+ok 7 - [QA-A4] 多参 lambda (i, idx) => ... 传入序号正确
+  ---
+  duration_ms: 4.153
+  type: 'test'
+  ...
+# Subtest: [QA-A4b] 对象展开 ... 合并字段
+ok 8 - [QA-A4b] 对象展开 ... 合并字段
+  ---
+  duration_ms: 2.0288
+  type: 'test'
+  ...
+# Subtest: [QA-B5] 6 类非法/不支持构造一律显式失败（节点 failed、错误非空、绝不返回数据）
+ok 9 - [QA-B5] 6 类非法/不支持构造一律显式失败（节点 failed、错误非空、绝不返回数据）
+  ---
+  duration_ms: 4.6352
+  type: 'test'
+  ...
+# Subtest: [QA-B5-route] 端到端：Code 抛错 → executeGraph 标 failedNode / ok=false（执行 error）
+ok 10 - [QA-B5-route] 端到端：Code 抛错 → executeGraph 标 failedNode / ok=false（执行 error）
+  ---
+  duration_ms: 4.7319
+  type: 'test'
+  ...
+# Subtest: [QA-C7] items/$input 在「无 ctx.items」时解析为用户同名字段，不遮蔽
+ok 11 - [QA-C7] items/$input 在「无 ctx.items」时解析为用户同名字段，不遮蔽
+  ---
+  duration_ms: 3.9943
+  type: 'test'
+  ...
+# Subtest: [QA-C7b] Set 节点 {{ }} 路径取用户字段而非引擎注入（={{ items }} / ={{ $json.items }}）
+ok 12 - [QA-C7b] Set 节点 {{ }} 路径取用户字段而非引擎注入（={{ items }} / ={{ $json.items }}）
+  ---
+  duration_ms: 1.6932
+  type: 'test'
+  ...
+# Subtest: [QA-C7c] IF conditionSt 中 items 字段参与判定（取用户字段）
+ok 13 - [QA-C7c] IF conditionSt 中 items 字段参与判定（取用户字段）
+  ---
+  duration_ms: 2.8928
+  type: 'test'
+  ...
+# Subtest: [QA-C8] 既有 Code 语义不变（1+1→2；const+return→10；upper(name)→ALICE）
+ok 14 - [QA-C8] 既有 Code 语义不变（1+1→2；const+return→10；upper(name)→ALICE）
+  ---
+  duration_ms: 0.9861
+  type: 'test'
+  ...
+# Subtest: [QA-C9] {{ }} 表达式路径既有行为不变（算术/字段/三目/内置函数）
+ok 15 - [QA-C9] {{ }} 表达式路径既有行为不变（算术/字段/三目/内置函数）
+  ---
+  duration_ms: 0.6964
+  type: 'test'
+  ...
+# Subtest: [QA-C9b] IF conditionSt true/false 字面量判定不变
+ok 16 - [QA-C9b] IF conditionSt true/false 字面量判定不变
+  ---
+  duration_ms: 0.5055
+  type: 'test'
+  ...
+# Subtest: [QA-F1a] 字段访问 json.items → 逐项（不丢项，数组保留在 output）
+ok 17 - [QA-F1a] 字段访问 json.items → 逐项（不丢项，数组保留在 output）
+  ---
+  duration_ms: 0.5955
+  type: 'test'
+  ...
+# Subtest: [QA-F1b] 字段访问 json.items（标量）→ 逐项保留每一项
+ok 18 - [QA-F1b] 字段访问 json.items（标量）→ 逐项保留每一项
+  ---
+  duration_ms: 0.4095
+  type: 'test'
+  ...
+# Subtest: [QA-F1c] 带空格的成员访问 json . items → 逐项
+ok 19 - [QA-F1c] 带空格的成员访问 json . items → 逐项
+  ---
+  duration_ms: 0.4265
+  type: 'test'
+  ...
+# Subtest: [QA-F1d] 对象键 items: → 逐项（非内置引用）
+ok 20 - [QA-F1d] 对象键 items: → 逐项（非内置引用）
+  ---
+  duration_ms: 0.5337
+  type: 'test'
+  ...
+# Subtest: [QA-F1e] 字符串字面量含 items → 逐项（内容不参与判定）
+ok 21 - [QA-F1e] 字符串字面量含 items → 逐项（内容不参与判定）
+  ---
+  duration_ms: 0.441
+  type: 'test'
+  ...
+# Subtest: [QA-F1f] $json.items 字段访问 → 逐项
+ok 22 - [QA-F1f] $json.items 字段访问 → 逐项
+  ---
+  duration_ms: 0.3997
+  type: 'test'
+  ...
+# Subtest: [QA-F1g] 真内置引用仍走整批（items / items.length / items.map / $input）
+ok 23 - [QA-F1g] 真内置引用仍走整批（items / items.length / items.map / $input）
+  ---
+  duration_ms: 1.0373
+  type: 'test'
+  ...
+# Subtest: [QA-F1h] 展开运算符 + 内置引用（工程师标记的交互点）：...$input / ...items 仍判为整批
+ok 24 - [QA-F1h] 展开运算符 + 内置引用（工程师标记的交互点）：...$input / ...items 仍判为整批
+  ---
+  duration_ms: 0.663
+  type: 'test'
+  ...
+# Subtest: [QA-F1i] 回归护栏：{ ...i.json } 展开在 items.map 中仍逐值正确（A4b 同源）
+ok 25 - [QA-F1i] 回归护栏：{ ...i.json } 展开在 items.map 中仍逐值正确（A4b 同源）
+  ---
+  duration_ms: 0.4891
+  type: 'test'
+  ...
+# Subtest: [QA-F2a] 数据项数组字面量 → 展开为多项
+ok 26 - [QA-F2a] 数据项数组字面量 → 展开为多项
+  ---
+  duration_ms: 3.0631
+  type: 'test'
+  ...
+# Subtest: [QA-F2b] [1,2,3].map(x => ({json:{n:x}})) → 展开 3 项
+ok 27 - [QA-F2b] [1,2,3].map(x => ({json:{n:x}})) → 展开 3 项
+  ---
+  duration_ms: 1.2465
+  type: 'test'
+  ...
+# Subtest: [QA-F2c] 普通值数组 / 标量 / 普通对象 / item 形态 → 历史语义不回归
+ok 28 - [QA-F2c] 普通值数组 / 标量 / 普通对象 / item 形态 → 历史语义不回归
+  ---
+  duration_ms: 2.8144
+  type: 'test'
+  ...
+# Subtest: [QA-F2d] 未返回（undefined）→ 原样透传当前项
+ok 29 - [QA-F2d] 未返回（undefined）→ 原样透传当前项
+  ---
+  duration_ms: 0.5544
+  type: 'test'
+  ...
+# Subtest: [QA-F2e] 逐项模式字段数组值不被展开（items 名当字段的兼容点）
+ok 30 - [QA-F2e] 逐项模式字段数组值不被展开（items 名当字段的兼容点）
+  ---
+  duration_ms: 0.5239
+  type: 'test'
+  ...
+# Subtest: [QA-F2f] 对象简写属性不支持 → 显式失败且提示正确写法
+ok 31 - [QA-F2f] 对象简写属性不支持 → 显式失败且提示正确写法
+  ---
+  duration_ms: 0.567
+  type: 'test'
+  ...
+# Subtest: [QA-F2g] 逐项语义特征：N 输入 × M 返回数据项 → N×M 项（每项独立求值后拼接）
+ok 32 - [QA-F2g] 逐项语义特征：N 输入 × M 返回数据项 → N×M 项（每项独立求值后拼接）
+  ---
+  duration_ms: 0.7416
+  type: 'test'
+  ...
+# Subtest: [QA-F3] 逐项模式 return [] → 不丢项（并入 output:[]，而非展开为 0 项）
+not ok 33 - [QA-F3] 逐项模式 return [] → 不丢项（并入 output:[]，而非展开为 0 项）
+  ---
+  duration_ms: 16.4885
+  type: 'test'
+  location: 'F:\\Documents\\GitHub\\mini-flow\\tests\\unit\\p0-adversarial.test.ts:1:17311'
+  failureType: 'testCodeFailure'
+  error: |-
+    3 输入必须 3 输出（曾被空数组 every 空真误判为数据项数组 → 0 项）
+    
+    0 !== 3
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 3
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (F:\Documents\GitHub\mini-flow\tests\unit\p0-adversarial.test.ts:425:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: [QA-F3-guard] 整批模式 return [] → 0 项（正确语义，守卫不得越界影响整批路径）
+ok 34 - [QA-F3-guard] 整批模式 return [] → 0 项（正确语义，守卫不得越界影响整批路径）
+  ---
+  duration_ms: 0.773
+  type: 'test'
+  ...
+# Subtest: [QA-F3-n] 逐项 return [] 输出项数恒等于输入项数（1→1、5→5）
+not ok 35 - [QA-F3-n] 逐项 return [] 输出项数恒等于输入项数（1→1、5→5）
+  ---
+  duration_ms: 1.6054
+  type: 'test'
+  location: 'F:\\Documents\\GitHub\\mini-flow\\tests\\unit\\p0-adversarial.test.ts:1:18308'
+  failureType: 'testCodeFailure'
+  error: |-
+    1 输入 → 1 输出（输出数恒等于输入数）
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (F:\Documents\GitHub\mini-flow\tests\unit\p0-adversarial.test.ts:448:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..35
+# tests 35
+# suites 0
+# pass 33
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 179.1456

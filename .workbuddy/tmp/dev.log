@@ -1,0 +1,103 @@
+### 1) init local D1
+
+ ⛅️ wrangler 4.129.1
+────────────────────
+Resource location: local 
+
+Use --remote if you want to access the remote instance.
+
+🌀 Executing on local database mini-flow-db (268512b4-7419-42ff-b0b5-dbb2f8db2880) from .wrangler\state\v3\d1:
+🌀 To execute on your remote database, add a --remote flag to your wrangler command.
+*** Fatal uncaught kj::Exception: workerd/util/sqlite.c++:1710: failed: SENTRY_DO SQLite failed; NOSENTRY database is locked: SQLITE_BUSY
+stack: 7ff7b6268471 7ff7b69ab697 7ff7b6015258 7ff7b6350047 7ff7b634f830 7ff7b5ff65b8 7ff7b5ff5ee8 7ff7b609f49a 7ff7b6258e6a 7ff7b4b36703 7ff7b625f642 7ff7b6266bc6 7ff7b625fbbd 7ff7b6266bc6 7ff7b625cc1b 7ff7b4b21ea8 7ff7b81f808e 7ffb6658ccb6 7ffb67e0ad6b
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mThe Workers runtime failed to start. There was likely a problem with the workerd binary or your configuration.[0m
+
+  Runtime stderr:
+  *** Fatal uncaught kj::Exception: workerd/util/sqlite.c++:1710: failed: SENTRY_DO SQLite failed; NOSENTRY database is locked: SQLITE_BUSY
+  stack: 7ff7b6268471 7ff7b69ab697 7ff7b6015258 7ff7b6350047 7ff7b634f830 7ff7b5ff65b8 7ff7b5ff5ee8 7ff7b609f49a 7ff7b6258e6a 7ff7b4b36703 7ff7b625f642 7ff7b6266bc6 7ff7b625fbbd 7ff7b6266bc6 7ff7b625cc1b 7ff7b4b21ea8 7ff7b81f808e 7ffb6658ccb6 7ffb67e0ad6b
+
+
+[32mIf you think this is a bug then please create an issue at https://github.com/cloudflare/workers-sdk/issues/new/choose[0m
+🪵  Logs were written to "C:\Users\Administrator\AppData\Roaming\xdg.config\.wrangler\logs\wrangler-2026-09-20_09-26-15_952.log"
+### d1 exit=1
+### 2) start dev server
+
+ ⛅️ wrangler 4.129.1 (update available 4.135.0)
+───────────────────────────────────────────────
+
+Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
+Your Worker has access to the following bindings:
+Binding                                                 Resource            Mode
+env.PUSH (PushConnection)                               Durable Object      local
+env.FLOW_ENGINE (FlowEngine)                            Workflow            local
+env.CREDENTIALS (133f1b8aec3049e0a337f753ccd7ff63)      KV Namespace        local
+env.DB (mini-flow-db)                                   D1 Database         local
+env.ASSETS                                              Assets              local
+
+❓ Your types might be out of date. Re-run `wrangler types` to ensure your types are correct.
+[wrangler:warn] Unable to fetch the `Request.cf` object! Falling back to a default placeholder...
+TimeoutError: The operation was aborted due to timeout
+    at new DOMException (node:internal/per_context/domexception:76:18)
+    at Timeout._onTimeout (node:internal/abort_controller:155:9)
+    at listOnTimeout (node:internal/timers:585:17)
+    at process.processTimers (node:internal/timers:521:7)
+    at F:\Documents\GitHub\mini-flow\node_modules\undici\index.js:157:7
+    at async setupCf (F:\Documents\GitHub\mini-flow\node_modules\miniflare\dist\src\index.js:52933:17)
+    at async #assembleConfig (F:\Documents\GitHub\mini-flow\node_modules\miniflare\dist\src\index.js:82440:21)
+    at async #assembleAndUpdateConfig (F:\Documents\GitHub\mini-flow\node_modules\miniflare\dist\src\index.js:82809:21)
+    at async F:\Documents\GitHub\mini-flow\node_modules\miniflare\dist\src\index.js:81664:7
+    at async Mutex.runWith (F:\Documents\GitHub\mini-flow\node_modules\miniflare\dist\src\index.js:54769:16)
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mScheduled Workers are not automatically triggered during local development.[0m
+
+  To manually trigger a scheduled event, run:
+    curl "http://127.0.0.1:8787/cdn-cgi/local/scheduled"
+  For more details, see [4mhttps://developers.cloudflare.com/workers/configuration/cron-triggers/#test-cron-triggers-locally[0m
+
+
+⎔ Starting local server...
+[wrangler:info] Ready on http://127.0.0.1:8787
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mservice core:user:mini-flow: Uncaught ReferenceError: pushSubscribeHandler is not defined[0m
+
+    at null.<anonymous> (index.js:7368:26) in mountPush
+    at null.<anonymous> (index.js:7371:1)
+
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mThe Workers runtime failed to start. There was likely a problem with the workerd binary or your configuration.[0m
+
+  Runtime stderr:
+  {"timestamp":"1789897568000","level":"error","source":"src/workerd/server/json-logger.c++:127","message":"service core:user:mini-flow: Uncaught ReferenceError: pushSubscribeHandler is not defined\n  at index.js:7368:26 in mountPush\n  at index.js:7371:1","context_depth":0}
+
+
+[32mIf you think this is a bug then please create an issue at https://github.com/cloudflare/workers-sdk/issues/new/choose[0m
+Note that there is a newer version of Wrangler available (4.135.0). Consider checking whether upgrading resolves this error.
+🪵  Logs were written to "C:\Users\Administrator\AppData\Roaming\xdg.config\.wrangler\logs\wrangler-2026-09-20_09-30-00_140.log"
+### dev exited=1

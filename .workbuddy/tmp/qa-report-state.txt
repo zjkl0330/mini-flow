@@ -1,0 +1,8 @@
+total 92
+drwxr-xr-x 1 Administrator 197121     0 Sep 20 19:51 .
+drwxr-xr-x 1 Administrator 197121     0 Sep 20 18:55 ..
+-rw-r--r-- 1 Administrator 197121 16050 Sep 20 18:55 01-prd-increment.md
+-rw-r--r-- 1 Administrator 197121 43205 Sep 20 19:04 02-design-increment.md
+-rw-r--r-- 1 Administrator 197121 28420 Sep 20 20:17 03-qa-report.md
+---REPORT LINES---
+349 deliverables/software-company/03-qa-report.md

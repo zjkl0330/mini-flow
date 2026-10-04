@@ -1,0 +1,34 @@
+diff --git a/src/nodes/code-node.ts b/src/nodes/code-node.ts
+index 0202e92..7e2ac6e 100644
+--- a/src/nodes/code-node.ts
++++ b/src/nodes/code-node.ts
+@@ -138,7 +138,9 @@ function applyToItem(code: string, ctx: EvalContext): Item[] {
+   if (result === undefined) return [{ json: item }];
+ 
+   if (Array.isArray(result)) {
+-    if (result.every(isItemShape)) return result.map(toItem);
++    // 空数组 [] 的 every() 恒为 true（vacuous truth），必须显式排除：否则会被误判为
++    // 「数据项数组」→ 展开为 0 项、**丢失全部输入**。空数组按普通值数组处理（并入 output）。
++    if (result.every(isItemShape)) return result.map(toItem); // [REVERSE-VALIDATION INJECTION] 去掉空数组守卫
+     return [{ json: { ...item, output: result } }];
+   }
+ 
+diff --git a/tests/unit/code-node.test.ts b/tests/unit/code-node.test.ts
+index 205639c..ca1dd8a 100644
+--- a/tests/unit/code-node.test.ts
++++ b/tests/unit/code-node.test.ts
+@@ -200,6 +200,14 @@ test('Code：逐项模式返回数据项数组字面量 → 展开为多项', as
+   assert.deepEqual(r.main, [{ json: { a: 1 } }, { json: { a: 2 } }]);
+ });
+ 
++test('Code：逐项模式返回空数组 → 不丢项（并入 output: []，而非误判数据项数组展开为 0 项）', async () => {
++  const r = await run('return [];', [{ n: 1 }, { n: 2 }]);
++  assert.equal(r.ok, true, r.ok ? '' : r.error);
++  assert.equal(r.main.length, 2, '空数组不得被当作数据项数组（vacuous truth）展开而丢光输入');
++  assert.deepEqual(r.main[0].json.output, []);
++  assert.deepEqual(r.main[1].json.output, []);
++});
++
+ test('Code：逐项模式标量 / 字段数组值仍维持历史（并入 output，不炸成多项）', async () => {
+   const scalar = await run('return n * 2;', [{ n: 3 }]);
+   assert.equal(scalar.main.length, 1);

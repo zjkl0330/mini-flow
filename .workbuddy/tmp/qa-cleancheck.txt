@@ -1,0 +1,4 @@
+a1224a9 test(qa): Round2 独立复验——F1 修复 + 数据项数组展开语义
+399edff fix(code): 逐项模式返回数据项数组时展开为多项 + 提示不支持对象简写属性（派单第4/5项）
+06e33d2 fix(code): 修正内置 items 引用判定过宽导致的静默丢项（QA F1）
+ba798fc test(qa): 独立对抗性回归——Code 节点显式失败/items 语义 + last-successful 载荷契约

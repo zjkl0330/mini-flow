@@ -1,0 +1,10 @@
+/f/Documents/GitHub/mini-flow
+---GIT STATUS---
+---BRANCH---
+iter/2026-09-20
+---LAST COMMITS---
+1448c73 docs: README 同步增量交付（测试入口/新增模块/状态）并归档 QA 报告
+f4f7fb1 fix(params): 修复节点参数与执行器读取键错配(renameKeys/aggregate/editFields/assign/dateTime)并收口死控件
+30c2af1 docs: 增量 PRD 与增量设计
+8f0d654 feat(increment): 外部触发(webhook/form)+REST能力端点+节点可配置化 (REQ-11,14,15,16,17,26,27,29,31,32)
+e0681b8 fix(auth/engine/rest): 鉴权墙+HMAC会话+执行引擎语义+REST契约 修复，并建立 node:test 回归套件

@@ -1,0 +1,137 @@
+=== HEAD ===
+1448c73
+=== TEST RUN ===
+运行 13 个测试文件：
+  - tests\integration\app-wiring.test.ts
+  - tests\integration\rest-boundary.test.ts
+  - tests\integration\rest-contract.test.ts
+  - tests\integration\rest-increment.test.ts
+  - tests\integration\schema-migration.test.ts
+  - tests\integration\webhook-boundary.test.ts
+  - tests\integration\webhook.test.ts
+  - tests\unit\dag.test.ts
+  - tests\unit\evaluator.test.ts
+  - tests\unit\http-request.test.ts
+  - tests\unit\node-param-alignment.test.ts
+  - tests\unit\node-registry.test.ts
+  - tests\unit\route.test.ts
+
+✔ 真实 index.ts 装配：未注册的 /webhook 返回 404 JSON（不得落 SPA fallback） (481.6711ms)
+✔ 真实 index.ts 装配：未注册的 /form 返回 404 JSON（REQ-31） (23.9774ms)
+✔ 真实 index.ts 装配：/webhook-test 未注册同样 404 JSON (27.7473ms)
+✔ 真实 index.ts 装配：普通未知路径仍走 SPA fallback（对照组） (5.894ms)
+✔ 真实 index.ts 装配：命中已激活的 /webhook 会真正触发执行 (104.9153ms)
+✔ retry：不存在的执行 404；执行存在但工作流缺失 404（均不得 500） (1105.9938ms)
+✔ retry：对 completed 执行也可重跑（设计允许重跑既有执行） (50.2496ms)
+✔ export：不存在 404；文件名特殊字符被安全化 (66.7715ms)
+✔ import：空 body / 非法 JSON / null 均 400（不得 500）；不覆盖既有 id (107.6711ms)
+✔ tags：PATCH 空 name 400；DELETE 不存在 404（与 community uninstall 语义统一）；DELETE 存在 → 200 (173.2665ms)
+✔ community：空 name 400、重复 409、卸载不存在 404 (126.3564ms)
+✔ insights：非法/半截日期参数不 500 (97.4275ms)
+✔ 回归 REQ-22：未知 /rest/* 仍 404 JSON (47.8402ms)
+✔ 登录：错误密码与不存在用户统一 401，正确密码 200 并下发会话 Cookie (612.6996ms)
+✔ 未登录：所有受保护端点一律 401 (85.6649ms)
+✔ 未登录不得写入：创建工作流 / 执行工作流 / 创建凭据 全部 401 (51.3932ms)
+✔ 公开端点未登录可访问：settings / module-settings / sso / meta (19.3815ms)
+✔ 凭据：写入明文入库，但任何出站响应都不含明文密钥 (167.4486ms)
+✔ 用户列表与当前登录用户自洽（不再返回空成员列表） (33.1338ms)
+✔ 工作流列表：filter 名称 / active / limit，非法 limit 不报 500 (96.9107ms)
+✔ 工作流详情：不存在返回 404 JSON（而非 SPA HTML） (51.7398ms)
+✔ 工作流详情：返回前端保存流程依赖的 checksum / versionId / scopes (21.1318ms)
+✔ 执行列表：limit=abc / limit=-1 不再 500（回归：NaN 直接进 SQL LIMIT） (90.0884ms)
+✔ 执行列表：status / filter 筛选生效，count 反映整个筛选集 (87.0995ms)
+✔ 执行详情：返回 n8n 兼容的 resultData.runData（main 为「数组的数组」） (98.0942ms)
+✔ 执行详情：不存在的执行返回 404 JSON (14.6613ms)
+✔ 运行工作流：提交引擎并返回 executionId；不存在的 workflow 返回 404 (73.2369ms)
+✔ 未知 /rest/* 路径返回 404 JSON，而不是 200 + SPA HTML (13.7698ms)
+✔ Push 订阅端点：未登录 401，已登录转发到 Durable Object (16.8499ms)
+✔ REQ-16/17：节点 properties 全部非空，credentials 均可在 credentialTypes 解析 (339.6066ms)
+✔ REQ-15：POST /executions/:id/retry 新建执行并写 retry_of (53.5582ms)
+✔ REQ-26：/rest/insights/* 聚合端点返回合理结构与数值 (115.6236ms)
+✔ REQ-27：/rest/tags 创建 / 列表 / 重命名 / 删除 / 重名冲突 (67.5912ms)
+✔ REQ-29：工作流导出（附件）+ 导入（id 冲突重分配） (84.5638ms)
+✔ REQ-32：社区节点安装 / 目录 / /plugins 合并 / 卸载 (79.4745ms)
+✔ 回归 REQ-22：未知 /rest/* 仍返回 404 JSON (15.2387ms)
+✔ 迁移一致性：schema.sql（新库）与 旧schema+increment-01.sql（升级库）最终结构一致 (31.3359ms)
+✔ 迁移一致性：executions 新列可实际读写（真实 SQLite 行为） (18.1054ms)
+✔ 路径归一化：尾斜杠 / 双斜杠 / URL 编码 命中；大小写敏感（不命中） (296.5387ms)
+✔ httpMethod：节点声明 POST 时 GET 视为未注册；GET 节点则反之 (62.0327ms)
+✔ /webhook-test 只匹配 active=0；生产 /webhook 只匹配 active=1（双向隔离） (69.6347ms)
+✔ disabled 的 webhook 节点被跳过（视为未注册 404） (10.9966ms)
+✔ 同名 path 出现在多个已激活工作流：行为确定（首个命中，仅触发一次） (26.1374ms)
+✔ body 采集：JSON 中文与 application/octet-stream 原始字节均不得丢数据/500 (42.9246ms)
+✔ responseNode：POST /webhook 返回 respondToWebhook 输出 + responseCode，而非 started 占位 (23.7505ms)
+✔ onReceived：显式 responseMode 不进等待，立即返回 started (15.3218ms)
+✔ 未注册 webhook 的 404 响应体含 code/message（对齐 n8n 契约） (16.4875ms)
+✔ 未注册的 /webhook 返回 404 JSON（不再落 SPA fallback 的 200 HTML） (244.4984ms)
+✔ 命中已激活 webhook 工作流：触发执行 + 返回 started 且 D1 落 mode=webhook (78.0925ms)
+✔ HTTP 方法不匹配的 webhook 视为未注册（404） (13.3391ms)
+✔ /webhook-test 仅匹配未激活工作流；生产 /webhook 不匹配 active=0 (17.3064ms)
+✔ determineResponseMode：responseNode / lastNode / onReceived 三态 (1.287ms)
+✔ flattenNodeOutput：单条取对象，多条取数组，空取 {}，null 原样 (30.1488ms)
+✔ waitForExecutionResponse：responseNode 模式取回包体与 responseCode (12.5803ms)
+✔ waitForExecutionResponse：未完成执行超时返回 null（可回退 onReceived） (229.1703ms)
+✔ Form：GET 渲染 HTML、POST 触发执行（urlencoded / JSON accept）、未知 404 JSON (40.859ms)
+✔ 线性链：拓扑序与入口正确 (19.9252ms)
+✔ connections 用节点 id 引用时也能对齐到 name (12.6664ms)
+✔ 禁用节点被排除出步骤序列 (1.7599ms)
+✔ 禁用中间节点后，其下游不进入拓扑序列（记录既有语义） (1.5148ms)
+✔ 空字符串 name 的节点必须被兜底命名（回归：曾以空串入图导致失联） (1.8775ms)
+✔ IF 的两条分支分别记为 branch 0 / 1 (0.8813ms)
+✔ 孤立子图：节点进入 steps 但不可达 (1.8701ms)
+✔ 画布便签排在触发器之前时入口仍为触发器（回归：曾整条工作流不执行） (0.896ms)
+✔ 多个入度 0 节点并存时优先选择触发器类型作为入口 (1.4684ms)
+✔ 无可达入口（无入度 0 节点）时 entry 为 null (1.769ms)
+✔ 算术：+ 对两个数字做数值相加（回归：曾返回字符串 "11"） (17.1795ms)
+✔ 加法：任一操作数为字符串时按 JS 语义拼接 (9.6948ms)
+✔ 比较与相等：数字与数字字符串互通 (2.0288ms)
+✔ 逻辑运算与优先级 (1.2774ms)
+✔ 三目表达式 (0.6775ms)
+✔ 字面量关键字 true / false / null（回归：曾当字段名取到 undefined） (0.8188ms)
+✔ 对象与数组字面量 (7.0007ms)
+✔ 字段引用：json.x / $json.x / 裸字段名 与点链 (2.7833ms)
+✔ 内置函数白名单 (3.6042ms)
+✔ 错误路径：语法错误 / 未知函数 / 非法字符 都必须显式失败而非静默返回空 (2.4601ms)
+✔ 空表达式返回 undefined (12.1993ms)
+✔ HTTP 节点：非 2xx 默认抛错（回归：曾把 5xx 页当成功数据） (186.1111ms)
+✔ HTTP 节点：ignoreHttpStatusErrors=true 时返回响应数据（逃生开关） (8.7198ms)
+✔ HTTP 节点：2xx 正常返回解析后的响应体 + statusCode (3.5184ms)
+✔ HTTP 节点：网络层错误无条件抛错（既有 REQ-10 语义保持） (1.3584ms)
+✔ 对齐：set.assignments(fixedCollection) 生效 (7.5628ms)
+✔ 对齐：sort.rules(fixedCollection) 生效 (10.205ms)
+✔ 对齐：filter.conditions(fixedCollection) + combinator 生效 (2.832ms)
+✔ 对齐：removeDuplicates.options.pairing(collection.fixedCollection) 生效 (2.9049ms)
+✔ 对齐：switch.rules.values(fixedCollection) 生效 (10.015ms)
+✔ [DEFECT-A1] aggregate.fields 为 json 型（字符串）：面板填写后应聚合生效 (3.1243ms)
+✔ [DEFECT-A2] editFields.fields 为 json 型（字符串）：面板填写后应写入字段 (2.0622ms)
+✔ [DEFECT-A3] assign.assignments 为 json 型（字符串）：面板填写后应赋值 (14.4326ms)
+✔ [DEFECT-A4] dateTime.additionalFields.add 为 json 型（字符串）：应做日期加减 (7.0074ms)
+✔ [DEFECT-A5] renameKeys.renaming(fixedCollection)：面板填写后不应抛错且应重命名 (5.18ms)
+✔ respondToWebhook 必须解析为 respondToWebhookNode（回归：曾被 webhookNode 抢占） (7.2248ms)
+✔ webhookSend 必须解析为 webhookSendNode（回归：曾被 webhookNode 抢占） (1.5454ms)
+✔ 通用 webhook 仍解析为 webhookNode (1.0603ms)
+✔ 其它核心节点类型映射正确 (5.5198ms)
+✔ 未知节点类型回落透传（不中断模板执行） (11.908ms)
+✔ 未连线的孤立节点不执行（回归：曾被执行） (34.9929ms)
+✔ IF 条件为 true 时只执行 true 分支（回归：曾两个分支都跑） (10.7607ms)
+✔ IF 条件为 false 时只执行 false 分支 (4.8229ms)
+✔ IF 基于字段比较的分支路由 (2.3087ms)
+✔ Code 节点执行真算术（回归：1+1 曾得字符串 "11"） (2.3596ms)
+✔ Code 节点支持 const + return 多语句 (1.9529ms)
+✔ Set 节点对 {{ }} 表达式求值并保留类型 (4.8166ms)
+✔ 数据沿链路正确传递：Trigger 输入 → Set → Code (3.7857ms)
+✔ branchOutputs：IF true → index 0，false → index 1 (1.8487ms)
+✔ branchOutputs：普通节点落到 index 0，空输出不登记分支 (2.9453ms)
+✔ branchOutputs：多分支节点按 main_N 键登记 (5.4433ms)
+✔ decideNode：不可达 / 已完成 / 无活跃分支 的判定 (1.4586ms)
+✔ 节点失败：run 不抛异常，标 failedNode 并停止后续节点 (2.3745ms)
+✔ 回调顺序：启动 → 检查点(currentNode=node) → 成功 → 检查点(currentNode=null) (1.8003ms)
+✔ 断点续跑：必须回填 seedResults，下游才能继续执行（否则续跑链路静默中断） (2.0169ms)
+ℹ tests 111
+ℹ suites 0
+ℹ pass 111
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16570.4056

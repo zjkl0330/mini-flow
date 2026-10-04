@@ -1,0 +1,289 @@
+=== rest-boundary.test.ts (delete tags case) ===
+commit f4f7fb1a13dbcc4b5faf883a8ff63f961e6fb624
+Author: zjkl <827802685@qq.com>
+Date:   Sun Sep 20 20:04:41 2026 +0800
+
+    fix(params): 修复节点参数与执行器读取键错配(renameKeys/aggregate/editFields/assign/dateTime)并收口死控件
+
+diff --git a/tests/integration/rest-boundary.test.ts b/tests/integration/rest-boundary.test.ts
+new file mode 100644
+index 0000000..aaa1b8d
+--- /dev/null
++++ b/tests/integration/rest-boundary.test.ts
+@@ -0,0 +1,146 @@
++// tests/integration/rest-boundary.test.ts
++// 本轮增量 REST 端点的对抗性边界：retry / export / import / tags / community / insights。
++// 目标：确认「不存在的资源 → 404（非 500）」「非法 body → 4xx（非 500）」
++//       「导入 id 冲突 → 重新分配，不覆盖」等异常路径都被正确收口。
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { restApi } from '../../src/n8n/router';
++import { makeEnv, loginCookie, jsonRequest } from '../helpers/env';
++
++const req = (env: unknown, path: string, init: RequestInit = {}) => restApi.request(path, init, env as never);
++const cookieHdr = (cookie: string) => ({ headers: { Cookie: cookie } });
++const jsonWithCookie = (body: unknown, cookie: string) =>
++  ({ method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify(body) }) as RequestInit;
++
++// —— retry 边界 ——
++
++test('retry：不存在的执行 404；执行存在但工作流缺失 404（均不得 500）', async () => {
++  const { env, db } = makeEnv();
++  const cookie = await loginCookie(restApi, env);
++
++  assert.equal((await req(env, '/executions/nope/retry', jsonWithCookie({}, cookie))).status, 404);
++
++  // 造一个「孤立执行」（其 workflow 不存在）——临时关闭 FK 约束
++  db.exec('PRAGMA foreign_keys = OFF');
++  await db.prepare("INSERT INTO executions (id,workflow_id,status,mode) VALUES ('orphan','ghost','failed','manual')").run();
++  const res = await req(env, '/executions/orphan/retry', jsonWithCookie({}, cookie));
++  assert.equal(res.status, 404, '工作流缺失应 404，而非 500');
++  db.exec('PRAGMA foreign_keys = ON');
++});
++
++test('retry：对 completed 执行也可重跑（设计允许重跑既有执行）', async () => {
++  const { env, db, flowCreateCalls } = makeEnv();
++  const cookie = await loginCookie(restApi, env);
++  await db.prepare("INSERT INTO workflows (id,name,nodes,connections) VALUES ('w1','WF','[]','{}')").run();
++  await db.prepare("INSERT INTO executions (id,workflow_id,status,mode,finished_at) VALUES ('e1','w1','completed','manual',datetime('now'))").run();
++
++  const res = await req(env, '/executions/e1/retry', jsonWithCookie({}, cookie));
++  assert.equal(res.status, 200);
++  const body = await res.json() as { data: { retryOf: string } };
++  assert.equal(body.data.retryOf, 'e1');
++  assert.equal(flowCreateCalls.length, 1);
++});
++
++// —— export 边界 ——
++
++test('export：不存在 404；文件名特殊字符被安全化', async () => {
++  const { env, db } = makeEnv();
++  const cookie = await loginCookie(restApi, env);
++  assert.equal((await req(env, '/workflows/nope/export', cookieHdr(cookie))).status, 404);
++
++  await db.prepare('INSERT INTO workflows (id,name,nodes,connections) VALUES (?,?,?,?)')
++    .bind('w1', 'a/b c*', '[]', '{}').run();
++  const res = await req(env, '/workflows/w1/export', cookieHdr(cookie));
++  assert.equal(res.status, 200);
++  assert.match(res.headers.get('content-disposition') ?? '', /filename="a_b_c_\.json"/);
++});
++
++// —— import 边界 ——
++
++test('import：空 body / 非法 JSON / null 均 400（不得 500）；不覆盖既有 id', async () => {
++  const { env, db } = makeEnv();
++  const cookie = await loginCookie(restApi, env);
++  await db.prepare("INSERT INTO workflows (id,name,nodes,connections) VALUES ('w1','Original','[]','{}')").run();
++
++  // 空 body
++  const empty = await req(env, '/workflows/import', {
++    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: '',
++  });
++  assert.equal(empty.status, 400);
++
++  // 非法 JSON
++  const bad = await req(env, '/workflows/import', {
++    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: '{bad json',
++  });
++  assert.equal(bad.status, 400);
++
++  // 字面量 null
++  const nul = await req(env, '/workflows/import', {
++    method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: 'null',
++  });
++  assert.equal(nul.status, 400);
++
++  // 复用已存在的 id → 重新分配，不覆盖原工作流
++  const dup = await req(env, '/workflows/import', jsonWithCookie({ id: 'w1', name: 'Hijack', nodes: [], connections: {} }, cookie));
++  assert.equal(dup.status, 201);
++  const newId = (await dup.json() as { data: { id: string } }).data.id;
++  assert.notEqual(newId, 'w1');
++  const row = await db.prepare("SELECT name FROM workflows WHERE id='w1'").first<{ name: string }>();
++  assert.equal(row!.name, 'Original', '原工作流不得被覆盖');
++});
++
++// —— tags 边界 ——
++
++test('tags：PATCH 空 name 400；DELETE 不存在 404（与 community uninstall 语义统一）；DELETE 存在 → 200', async () => {
++  const { env } = makeEnv();
++  const cookie = await loginCookie(restApi, env);
++  const created = await req(env, '/tags', jsonRequest({ name: 'prod' }, { Cookie: cookie }));
++  const id = (await created.json() as { data: { id: string } }).data.id;
++
++  const emptyPatch = await req(env, `/tags/${id}`, {
++    method: 'PATCH', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({ name: '   ' }),
++  });
++  assert.equal(emptyPatch.status, 400, '空 name 应 400');
++
++  // 语义统一（本轮收口）：DELETE 不存在 → 404，与 community-nodes/:name/uninstall 一致（此前为 200 幂等）
++  const delMissing = await req(env, '/tags/does-not-exist', { method: 'DELETE', headers: { Cookie: cookie } });
++  assert.equal(delMissing.status, 404);
++
++  // DELETE 存在的 id → 200 {data:true}
++  const delExisting = await req(env, `/tags/${id}`, { method: 'DELETE', headers: { Cookie: cookie } });
++  assert.equal(delExisting.status, 200);
++  assert.equal((await delExisting.json() as { data: boolean }).data, true);
++});
++
++// —— community-nodes 边界 ——
++
++test('community：空 name 400、重复 409、卸载不存在 404', async () => {
++  const { env } = makeEnv();
++  const cookie = await loginCookie(restApi, env);
++  assert.equal((await req(env, '/community-nodes', jsonWithCookie({ name: '   ' }, cookie))).status, 400);
++  assert.equal((await req(env, '/community-nodes', jsonWithCookie({ name: 'p' }, cookie))).status, 201);
++  assert.equal((await req(env, '/community-nodes', jsonWithCookie({ name: 'p' }, cookie))).status, 409);
++  assert.equal((await req(env, '/community-nodes/ghost/uninstall', jsonWithCookie({}, cookie))).status, 404);
++});
++
++// —— insights 边界 ——
++
++test('insights：非法/半截日期参数不 500', async () => {
++  const { env } = makeEnv();
++  const cookie = await loginCookie(restApi, env);
++  for (const q of ['?startDate=abc&endDate=xxx', '?startDate=2020-01-01', '?endDate=zzz', '?granularity=bogus']) {
++    const res = await req(env, `/insights/summary${q}`, cookieHdr(cookie));
++    assert.equal(res.status, 200, `insights summary ${q} 应 200`);
++  }
++  assert.equal((await req(env, '/insights/by-time?granularity=bogus', cookieHdr(cookie))).status, 200);
++});
++
++// —— 回归 REQ-22 ——
++
++test('回归 REQ-22：未知 /rest/* 仍 404 JSON', async () => {
++  const { env } = makeEnv();
++  const cookie = await loginCookie(restApi, env);
++  const res = await req(env, '/no-such-endpoint-xyz', cookieHdr(cookie));
++  assert.equal(res.status, 404);
++  assert.match(res.headers.get('content-type') ?? '', /application\/json/);
++});
+
+=== node-param-alignment.test.ts diff ===
+commit f4f7fb1a13dbcc4b5faf883a8ff63f961e6fb624
+Author: zjkl <827802685@qq.com>
+Date:   Sun Sep 20 20:04:41 2026 +0800
+
+    fix(params): 修复节点参数与执行器读取键错配(renameKeys/aggregate/editFields/assign/dateTime)并收口死控件
+
+diff --git a/tests/unit/node-param-alignment.test.ts b/tests/unit/node-param-alignment.test.ts
+new file mode 100644
+index 0000000..ce58463
+--- /dev/null
++++ b/tests/unit/node-param-alignment.test.ts
+@@ -0,0 +1,116 @@
++// tests/unit/node-param-alignment.test.ts
++// REQ-16「参数名 ↔ 执行器读取键」对齐审计的可执行版本。
++//
++// 背景（设计 §5 第 7 条）：节点 properties[].name 必须与执行器实际读取的 p.<key> 对齐，
++// 否则「面板能填但不生效」。这里按「编辑器真实写入的参数形态」驱动执行器：
++//   * fixedCollection 的编辑器值形如 { <optionName>: [ {...} ] }
++//   * json 型参数的编辑器值是「字符串」（需执行器 JSON.parse）
++//
++// 前半部分锁定已对齐节点（应通过）；后半部分锁定本轮发现的真实缺陷（当前会失败，
++// 属「测试正确、实现有 bug」，路由给 Engineer 修复——不要为迁就实现而改断言）。
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { setNode } from '../../src/nodes/if-condition';
++import { switchNode, removeDuplicatesNode } from '../../src/nodes/logic';
++import { sortNode, filterNode, aggregateNode, editFieldsNode, dateTimeNode } from '../../src/nodes/transform';
++import { renameKeysNode, assignNode } from '../../src/nodes/util';
++import type { NodeExecutionContext } from '../../src/types';
++
++function ctx(type: string, parameters: Record<string, unknown>, main: Array<{ json: Record<string, unknown> }>): NodeExecutionContext {
++  return {
++    workflow: { name: 'w', nodes: [], connections: {} },
++    executionId: 'e1',
++    node: { type, name: 'n', parameters, typeVersion: 1, position: [0, 0] },
++    inputData: { main },
++    env: {} as never,
++    log: () => {},
++  } as unknown as NodeExecutionContext;
++}
++
++const rows = () => [
++  { json: { a: 2 as number, x: 'b' } },
++  { json: { a: 1 as number, x: 'a' } },
++  { json: { a: 2 as number, x: 'b' } },
++];
++
++// ————————————————————————————————————————————————
++// A. 已对齐节点（fixedCollection / 扁平键）：应通过
++// ————————————————————————————————————————————————
++
++test('对齐：set.assignments(fixedCollection) 生效', async () => {
++  const out = await setNode.execute(ctx('n8n-nodes-base.set', { assignments: { assignments: [{ name: 'k', value: 'v' }] } }, rows()));
++  assert.equal(out.main[0].json.k, 'v');
++});
++
++test('对齐：sort.rules(fixedCollection) 生效', async () => {
++  const out = await sortNode.execute(ctx('n8n-nodes-base.sort', { rules: { rules: [{ field: 'a', type: 'ascending' }] } }, rows()));
++  assert.deepEqual(out.main.map((r) => r.json.a), [1, 2, 2]);
++});
++
++test('对齐：filter.conditions(fixedCollection) + combinator 生效', async () => {
++  const out = await filterNode.execute(ctx('n8n-nodes-base.filter', {
++    conditions: { conditions: [{ leftValue: '{{ $json.a }}', operator: 'equals', rightValue: '1' }] }, combinator: 'and',
++  }, rows()));
++  assert.equal(out.main.length, 1);
++  assert.equal(out.main[0].json.a, 1);
++});
++
++test('对齐：removeDuplicates.options.pairing(collection.fixedCollection) 生效', async () => {
++  const out = await removeDuplicatesNode.execute(ctx('n8n-nodes-base.removeDuplicates', {
++    options: { pairing: { pairing: [{ field1: 'a', field2: 'x' }] } },
++  }, rows()));
++  assert.equal(out.main.length, 2, '按 (a,x) 去重后应剩 2 条');
++});
++
++test('对齐：switch.rules.values(fixedCollection) 生效', async () => {
++  const out = await switchNode.execute(ctx('n8n-nodes-base.switch', {
++    mode: 'rules',
++    rules: { values: [{ conditions: { conditions: [{ leftValue: '{{ $json.a }}', operator: 'equals', rightValue: '1' }] } }] },
++  }, rows()));
++  assert.equal(out.main.length, 1);
++});
++
++// ————————————————————————————————————————————————
++// B. 本轮发现的真实缺陷（json 型参数未解析 / 读取键错位）：当前应失败
++// ————————————————————————————————————————————————
++
++test('[DEFECT-A1] aggregate.fields 为 json 型（字符串）：面板填写后应聚合生效', async () => {
++  // 编辑器 json 型参数的值为字符串，执行器必须解析后再当数组用。
++  const out = await aggregateNode.execute(ctx('n8n-nodes-base.aggregate', {
++    fields: JSON.stringify([{ field: 'b', aggregation: 'sum' }]),
++  }, [{ json: { b: 10 } }, { json: { b: 20 } }]));
++  assert.equal(out.main[0].json.b, 30, 'json 型 fields 字符串应被解析并聚合为 30');
++});
++
++test('[DEFECT-A2] editFields.fields 为 json 型（字符串）：面板填写后应写入字段', async () => {
++  const out = await editFieldsNode.execute(ctx('n8n-nodes-base.editFields', {
++    fields: JSON.stringify([{ name: 'x', value: '1' }]),
++  }, rows()));
++  assert.equal(out.main[0].json.x, '1', 'json 型 fields 字符串应被解析并写入 x');
++});
++
++test('[DEFECT-A3] assign.assignments 为 json 型（字符串）：面板填写后应赋值', async () => {
++  const out = await assignNode.execute(ctx('n8n-nodes-base.assign', {
++    assignments: JSON.stringify([{ name: 'y', value: 9 }]),
++  }, rows()));
++  assert.equal(out.main[0].json.y, 9, 'json 型 assignments 字符串应被解析并赋值 y');
++});
++
++test('[DEFECT-A4] dateTime.additionalFields.add 为 json 型（字符串）：应做日期加减', async () => {
++  const base = new Date('2020-01-01T00:00:00.000Z');
++  const out = await dateTimeNode.execute(ctx('n8n-nodes-base.dateTime', {
++    dateProperty: 'd',
++    additionalFields: { add: JSON.stringify({ value: 1, unit: 'days' }) },
++  }, [{ json: { d: base.toISOString() } }]));
++  const result = new Date(String(out.main[0].json.result));
++  assert.equal(result.toISOString(), '2020-01-02T00:00:00.000Z', 'json 型 add 字符串应被解析并 +1 天');
++});
++
++test('[DEFECT-A5] renameKeys.renaming(fixedCollection)：面板填写后不应抛错且应重命名', async () => {
++  // fixedCollection 编辑器值为 { renaming: [ {fromKey,toKey} ] }；
++  // 执行器当前把 p.renaming 当数组迭代 → "renames is not iterable" 崩溃。
++  const out = await renameKeysNode.execute(ctx('n8n-nodes-base.renameKeys', {
++    renaming: { renaming: [{ fromKey: 'a', toKey: 'z' }] },
++  }, rows()));
++  assert.ok('z' in out.main[0].json && !('a' in out.main[0].json), '应把字段 a 重命名为 z 且不抛错');
++});

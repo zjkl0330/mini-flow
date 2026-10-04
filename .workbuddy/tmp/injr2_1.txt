@@ -1,0 +1,17 @@
+=== INJ-R2-1: renameKeys reverted ===
+✔ 对齐：set.assignments(fixedCollection) 生效 (4.4705ms)
+✔ 对齐：sort.rules(fixedCollection) 生效 (9.8026ms)
+✔ 对齐：filter.conditions(fixedCollection) + combinator 生效 (2.8511ms)
+✔ 对齐：removeDuplicates.options.pairing(collection.fixedCollection) 生效 (1.1844ms)
+✔ 对齐：switch.rules.values(fixedCollection) 生效 (1.7323ms)
+✔ [DEFECT-A1] aggregate.fields 为 json 型（字符串）：面板填写后应聚合生效 (5.0098ms)
+✔ [DEFECT-A2] editFields.fields 为 json 型（字符串）：面板填写后应写入字段 (1.7518ms)
+✔ [DEFECT-A3] assign.assignments 为 json 型（字符串）：面板填写后应赋值 (1.3572ms)
+✔ [DEFECT-A4] dateTime.additionalFields.add 为 json 型（字符串）：应做日期加减 (3.3433ms)
+✖ [DEFECT-A5] renameKeys.renaming(fixedCollection)：面板填写后不应抛错且应重命名 (2.0149ms)
+ℹ tests 10
+ℹ pass 9
+ℹ fail 1
+✖ failing tests:
+✖ [DEFECT-A5] renameKeys.renaming(fixedCollection)：面板填写后不应抛错且应重命名 (2.0149ms)
+restored

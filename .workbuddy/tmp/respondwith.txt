@@ -1,0 +1,11 @@
+  [buildFlow qa-respondWith-text-mu9s3mcw] create=201 body={"data":{"id":"fb065a6d-1d80-4e24-b4e0-80e8f57249be","name":"qa-respondWith-text-mu9s3mcw","nodes":[{"parameters":{"path
+  [buildFlow qa-respondWith-text-mu9s3mcw] activate=200
+[L-2 text] status=200 ct=text/plain; charset=utf-8 body="你好世界-hello"
+  => text/plain? true  体为纯文本(非JSON包裹)? true
+  [buildFlow qa-respondWith-default-mu9s3mcw] create=201 body={"data":{"id":"c611e0a3-e512-4d03-bc33-de7e023a2ca8","name":"qa-respondWith-default-mu9s3mcw","nodes":[{"parameters":{"p
+  [buildFlow qa-respondWith-default-mu9s3mcw] activate=200
+[L-2 默认json] status=201 ct=application/json body="{\"body\":{\"ping\":1},\"headers\":{\"accept\":\"*/*\",\"accept-encoding\":\"br
+  => application/json? true  状态码=201? true
+  [tags create] status=201 body={"data":{"id":"f59111f2-643e-4306-bae7-74c14313afe9","name":"qa-tag-mu9s3mcw","createdAt":"2026-09-20 12:14:44","updated
+[L-3 tags] DELETE 不存在=404 (期望404)  ct=application/json
+[L-3 tags] DELETE 存在=200 (期望200) body={"data":true}

@@ -1,0 +1,563 @@
+WRANGLER_BIN=node_modules/wrangler/bin/wrangler.js
+=== 1) 初始化本地 D1 ===
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  },
+  {
+    "results": [],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  }
+]
+D1_EXIT=0
+=== 2) 启动 wrangler dev (port 8787) ===
+
+ ⛅️ wrangler 4.129.1
+────────────────────
+
+Cloudflare collects anonymous telemetry about your usage of Wrangler. Learn more at https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler/telemetry.md
+Your Worker has access to the following bindings:
+Binding                                                 Resource            Mode
+env.PUSH (PushConnection)                               Durable Object      local
+env.FLOW_ENGINE (FlowEngine)                            Workflow            local
+env.CREDENTIALS (133f1b8aec3049e0a337f753ccd7ff63)      KV Namespace        local
+env.DB (mini-flow-db)                                   D1 Database         local
+env.ASSETS                                              Assets              local
+
+❓ Your types might be out of date. Re-run `wrangler types` to ensure your types are correct.
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mScheduled Workers are not automatically triggered during local development.[0m
+
+  To manually trigger a scheduled event, run:
+    curl "http://127.0.0.1:8787/cdn-cgi/local/scheduled"
+  For more details, see [4mhttps://developers.cloudflare.com/workers/configuration/cron-triggers/#test-cron-triggers-locally[0m
+
+
+⎔ Starting local server...
+[wrangler:info] Ready on http://127.0.0.1:8787
+[wrangler:info] GET / 200 OK (32421ms)
+[wrangler:info] GET /rest/settings 200 OK (25909ms)
+[wrangler:info] GET / 200 OK (28ms)
+[wrangler:info] GET /rest/settings 200 OK (2802ms)
+[wrangler:info] GET /webhook/test-path 200 OK (1583ms) `Sec-Fetch-Mode: navigate` header present - using `not_found_handling` behavior
+[wrangler:info] GET /form/test-path 200 OK (815ms) `Sec-Fetch-Mode: navigate` header present - using `not_found_handling` behavior
+[wrangler:info] GET /rest/insights/summary 401 Unauthorized (427ms)
+[wrangler:info] GET /rest/tags 401 Unauthorized (162ms)
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+[wrangler:info] GET / 200 OK (38ms)
+[wrangler:info] GET /webhook/nope 404 Not Found (764ms)
+[wrangler:info] GET /form/nope 404 Not Found (100ms)
+[wrangler:info] GET /rest/insights/summary 401 Unauthorized (50ms)
+[wrangler:info] GET /rest/tags 401 Unauthorized (50ms)
+[wrangler:info] GET /rest/community-nodes 401 Unauthorized (67ms)
+[wrangler:info] POST /rest/login 401 Unauthorized (50ms)
+[wrangler:info] GET /rest/insights/summary 401 Unauthorized (69ms)
+[wrangler:info] GET /rest/insights/by-workflow 401 Unauthorized (45ms)
+[wrangler:info] GET /rest/tags 401 Unauthorized (45ms)
+[wrangler:info] GET /rest/community-nodes 401 Unauthorized (41ms)
+[wrangler:info] GET /rest/plugins 401 Unauthorized (43ms)
+[wrangler:info] GET /rest/node-types 401 Unauthorized (38ms)
+[wrangler:info] POST /rest/login 200 OK (120ms)
+[wrangler:info] POST /rest/login 401 Unauthorized (54ms)
+[wrangler:info] POST /rest/login 401 Unauthorized (51ms)
+[wrangler:info] GET /rest/node-types 200 OK (41ms)
+[wrangler:info] GET /rest/credential-types 200 OK (37ms)
+[wrangler:info] GET /rest/insights/summary 200 OK (109ms)
+[wrangler:info] GET /rest/insights/by-workflow 200 OK (97ms)
+[wrangler:info] GET /rest/insights/by-time 200 OK (103ms)
+[wrangler:info] GET /rest/insights/by-mode 200 OK (99ms)
+[wrangler:info] POST /rest/tags 201 Created (217ms)
+[wrangler:info] GET /rest/tags 200 OK (101ms)
+[wrangler:info] POST /rest/tags 409 Conflict (184ms)
+[wrangler:info] PATCH /rest/tags/585681d2-2134-4160-9308-29e2ff8d07d4 200 OK (311ms)
+[wrangler:info] DELETE /rest/tags/585681d2-2134-4160-9308-29e2ff8d07d4 200 OK (98ms)
+[wrangler:info] POST /rest/community-nodes 201 Created (189ms)
+[wrangler:info] GET /rest/community-nodes 200 OK (88ms)
+[wrangler:info] GET /rest/plugins 200 OK (147ms)
+[wrangler:info] POST /rest/workflows 201 Created (81ms)
+[wrangler:info] POST /rest/workflows/de25bcfc-5d14-45cc-8c83-51cda29e489e/activate 200 OK (152ms)
+[wrangler:info] GET /rest/executions 200 OK (146ms)
+[wrangler:info] POST /webhook/e2e-hook 200 OK (1655ms)
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mUncaught Error: The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/ [0m
+
+
+[wrangler:info] POST /webhook/does-not-exist-xyz 404 Not Found (747ms)
+[wrangler:info] GET /rest/executions 200 OK (285ms)
+[wrangler:info] GET /rest/workflows/de25bcfc-5d14-45cc-8c83-51cda29e489e/export 200 OK (86ms)
+[wrangler:info] POST /rest/workflows/import 201 Created (170ms)
+[wrangler:info] GET /rest/executions 200 OK (234ms)
+[wrangler:info] POST /rest/executions/408b6971-f02c-41d6-8da5-93f0774d6145/retry 200 OK (2952ms)
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mUncaught Error: The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/ [0m
+
+
+[wrangler:info] GET /rest/executions 200 OK (509ms)
+[wrangler:info] GET /rest/executions/3aeaa9a6-afd3-46ec-92e2-a551baa6133b 200 OK (196ms)
+[wrangler:info] GET /rest/workflows 401 Unauthorized (55ms)
+[wrangler:info] GET /rest/credentials 401 Unauthorized (46ms)
+[wrangler:info] POST /rest/workflows 401 Unauthorized (52ms)
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+[wrangler:info] GET /rest/settings 200 OK (286ms)
+[wrangler:info] POST /rest/login 200 OK (50ms)
+[wrangler:info] POST /rest/login 200 OK (73ms)
+[wrangler:info] POST /rest/login 200 OK (51ms)
+[wrangler:info] POST /rest/workflows 201 Created (246ms)
+[wrangler:info] POST /rest/workflows/4c679092-4c73-41cd-8f39-b673920768c0/activate 200 OK (259ms)
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mUncaught Error: The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/ [0m
+
+
+[wrangler:info] POST /webhook/qa-resp-mu9r441f 202 Accepted (3972ms)
+[wrangler:info] GET /rest/executions 200 OK (530ms)
+[wrangler:info] DELETE /rest/workflows/4c679092-4c73-41cd-8f39-b673920768c0 200 OK (266ms)
+[wrangler:info] POST /rest/login 200 OK (80ms)
+[wrangler:info] POST /rest/executions/nope-xyz/retry 404 Not Found (210ms)
+[wrangler:info] GET /rest/workflows/nope-xyz/export 404 Not Found (96ms)
+[wrangler:info] POST /rest/workflows/import 400 Bad Request (122ms)
+[wrangler:info] POST /rest/workflows/import 400 Bad Request (109ms)
+[wrangler:info] POST /rest/tags 400 Bad Request (84ms)
+[wrangler:info] PATCH /rest/tags/nope-xyz 404 Not Found (87ms)
+[wrangler:info] DELETE /rest/tags/nope-xyz 200 OK (101ms)
+[wrangler:info] POST /rest/community-nodes 400 Bad Request (85ms)
+[wrangler:info] POST /rest/community-nodes/ghost-pkg/uninstall 404 Not Found (103ms)
+[wrangler:info] GET /rest/insights/summary 200 OK (87ms)
+[wrangler:info] GET /rest/no-such-zzz 404 Not Found (33ms)
+[wrangler:info] GET /rest/workflows 401 Unauthorized (34ms)
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+[wrangler:info] POST /rest/login 200 OK (292ms)
+[wrangler:info] POST /rest/login 401 Unauthorized (50ms)
+[wrangler:info] POST /rest/login 401 Unauthorized (57ms)
+[wrangler:info] GET /rest/node-types 200 OK (71ms)
+[wrangler:info] GET /rest/credential-types 200 OK (67ms)
+[wrangler:info] GET /rest/insights/summary 200 OK (218ms)
+[wrangler:info] GET /rest/insights/by-workflow 200 OK (86ms)
+[wrangler:info] GET /rest/insights/by-time 200 OK (88ms)
+[wrangler:info] GET /rest/insights/by-mode 200 OK (87ms)
+[wrangler:info] POST /rest/tags 201 Created (240ms)
+[wrangler:info] GET /rest/tags 200 OK (83ms)
+[wrangler:info] POST /rest/tags 409 Conflict (80ms)
+[wrangler:info] PATCH /rest/tags/1fd80bec-f408-486a-8cce-15a7755b8a65 200 OK (275ms)
+[wrangler:info] DELETE /rest/tags/1fd80bec-f408-486a-8cce-15a7755b8a65 200 OK (167ms)
+[wrangler:info] POST /rest/community-nodes 409 Conflict (95ms)
+[wrangler:info] GET /rest/community-nodes 200 OK (85ms)
+[wrangler:info] GET /rest/plugins 200 OK (76ms)
+[wrangler:info] POST /rest/workflows 201 Created (68ms)
+[wrangler:info] POST /rest/workflows/36dc7f37-7f58-4e9f-80c3-2d4d15d5ab2f/activate 200 OK (203ms)
+[wrangler:info] GET /rest/executions 200 OK (220ms)
+[wrangler:info] POST /webhook/e2e-hook 200 OK (1520ms)
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mUncaught Error: The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/ [0m
+
+
+[wrangler:info] POST /webhook/does-not-exist-xyz 404 Not Found (649ms)
+[wrangler:info] GET /rest/executions 200 OK (271ms)
+[wrangler:info] GET /rest/workflows/36dc7f37-7f58-4e9f-80c3-2d4d15d5ab2f/export 200 OK (102ms)
+[wrangler:info] POST /rest/workflows/import 201 Created (108ms)
+[wrangler:info] GET /rest/executions 200 OK (215ms)
+[wrangler:info] POST /rest/executions/238a0c3d-b3b0-466b-b64f-32b12450afaa/retry 200 OK (2722ms)
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mUncaught Error: The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/ [0m
+
+
+[wrangler:info] GET /rest/executions 200 OK (768ms)
+[wrangler:info] GET /rest/executions/34861896-4516-438a-9bf0-a31bf5a49b3a 200 OK (193ms)
+[wrangler:info] GET /rest/workflows 401 Unauthorized (51ms)
+[wrangler:info] GET /rest/credentials 401 Unauthorized (51ms)
+[wrangler:info] POST /rest/workflows 401 Unauthorized (51ms)
+[wrangler:info] POST /rest/login 200 OK (79ms)
+[wrangler:info] POST /rest/workflows 201 Created (295ms)
+[wrangler:info] POST /webhook/qa-text-mu9s2pal 404 Not Found (92ms)
+[wrangler:info] POST /rest/workflows 201 Created (162ms)
+[wrangler:info] POST /webhook/qa-json-mu9s2pal 404 Not Found (100ms)
+[wrangler:info] DELETE /rest/tags/ghost-mu9s2pal 404 Not Found (101ms)
+[wrangler:info] POST /rest/tags 201 Created (197ms)
+[wrangler:info] POST /rest/login 200 OK (61ms)
+[wrangler:info] POST /rest/workflows 201 Created (176ms)
+[wrangler:info] POST /rest/workflows/fb065a6d-1d80-4e24-b4e0-80e8f57249be/activate 200 OK (174ms)
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mUncaught Error: The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/ [0m
+
+
+[wrangler:info] POST /webhook/qa-text-mu9s3mcw 200 OK (4217ms)
+[wrangler:info] POST /rest/workflows 201 Created (108ms)
+[wrangler:info] POST /rest/workflows/c611e0a3-e512-4d03-bc33-de7e023a2ca8/activate 200 OK (175ms)
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mUncaught Error: The Workers runtime canceled this request because it detected that your Worker's code had hung and would never generate a response. Refer to: https://developers.cloudflare.com/workers/observability/errors/ [0m
+
+
+[wrangler:info] POST /webhook/qa-json-mu9s3mcw 201 Created (4189ms)
+[wrangler:info] DELETE /rest/workflows/fb065a6d-1d80-4e24-b4e0-80e8f57249be 200 OK (94ms)
+[wrangler:info] DELETE /rest/workflows/c611e0a3-e512-4d03-bc33-de7e023a2ca8 200 OK (299ms)
+[wrangler:info] DELETE /rest/tags/ghost-mu9s3mcw 404 Not Found (96ms)
+[wrangler:info] POST /rest/tags 201 Created (298ms)
+[wrangler:info] DELETE /rest/tags/f59111f2-643e-4306-bae7-74c14313afe9 200 OK (184ms)
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+[wrangler:info] GET /rest/login 401 Unauthorized (64ms)
+[wrangler:info] POST /rest/login 503 Service Unavailable (61ms)
+[wrangler:info] POST /rest/login 503 Service Unavailable (52ms)
+[wrangler:info] GET /rest/workflows 401 Unauthorized (60ms)
+[wrangler:info] GET /rest/login 401 Unauthorized (71ms)
+[wrangler:info] POST /rest/login 503 Service Unavailable (67ms)
+[wrangler:info] GET /rest/login 401 Unauthorized (72ms)
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mBuild failed with 1 error:[0m
+
+  [31mX [41;31m[[41;97mERROR[41;31m][0m [1mNo matching export in "src/n8n/projects.ts" for import "PERSONAL_PROJECT_ID"[0m
+  
+      src/n8n/workflows.ts:10:9:
+  [37m      10 │ import { [32mPERSONAL_PROJECT_ID[37m } from './projects';
+           ╵          [32m~~~~~~~~~~~~~~~~~~~[0m
+  
+  
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mBuild failed with 1 error:[0m
+
+  [31mX [41;31m[[41;97mERROR[41;31m][0m [1mNo matching export in "src/n8n/projects.ts" for import "PERSONAL_PROJECT_ID"[0m
+  
+      src/n8n/workflows.ts:10:9:
+  [37m      10 │ import { [32mPERSONAL_PROJECT_ID[37m } from './projects';
+           ╵          [32m~~~~~~~~~~~~~~~~~~~[0m
+  
+  
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mBuild failed with 1 error:[0m
+
+  [31mX [41;31m[[41;97mERROR[41;31m][0m [1mNo matching export in "src/n8n/projects.ts" for import "PERSONAL_PROJECT_ID"[0m
+  
+      src/n8n/workflows.ts:10:9:
+  [37m      10 │ import { [32mPERSONAL_PROJECT_ID[37m } from './projects';
+           ╵          [32m~~~~~~~~~~~~~~~~~~~[0m
+  
+  
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mBuild failed with 1 error:[0m
+
+  [31mX [41;31m[[41;97mERROR[41;31m][0m [1mNo matching export in "src/n8n/projects.ts" for import "PERSONAL_PROJECT_ID"[0m
+  
+      src/n8n/workflows.ts:10:9:
+  [37m      10 │ import { [32mPERSONAL_PROJECT_ID[37m } from './projects';
+           ╵          [32m~~~~~~~~~~~~~~~~~~~[0m
+  
+  
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mBuild failed with 1 error:[0m
+
+  [31mX [41;31m[[41;97mERROR[41;31m][0m [1mNo matching export in "src/n8n/projects.ts" for import "PERSONAL_PROJECT_ID"[0m
+  
+      src/n8n/workflows.ts:10:9:
+  [37m      10 │ import { [32mPERSONAL_PROJECT_ID[37m } from './projects';
+           ╵          [32m~~~~~~~~~~~~~~~~~~~[0m
+  
+  
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mBuild failed with 1 error:[0m
+
+  [31mX [41;31m[[41;97mERROR[41;31m][0m [1mNo matching export in "src/n8n/projects.ts" for import "PERSONAL_PROJECT_ID"[0m
+  
+      src/n8n/workflows.ts:10:9:
+  [37m      10 │ import { [32mPERSONAL_PROJECT_ID[37m } from './projects';
+           ╵          [32m~~~~~~~~~~~~~~~~~~~[0m
+  
+  
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mBuild failed with 1 error:[0m
+
+  [31mX [41;31m[[41;97mERROR[41;31m][0m [1mNo matching export in "src/n8n/projects.ts" for import "PERSONAL_PROJECT_ID"[0m
+  
+      src/n8n/workflows.ts:10:9:
+  [37m      10 │ import { [32mPERSONAL_PROJECT_ID[37m } from './projects';
+           ╵          [32m~~~~~~~~~~~~~~~~~~~[0m
+  
+  
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mBuild failed with 1 error:[0m
+
+  [31mX [41;31m[[41;97mERROR[41;31m][0m [1mNo matching export in "src/n8n/projects.ts" for import "PERSONAL_PROJECT_ID"[0m
+  
+      src/n8n/workflows.ts:10:9:
+  [37m      10 │ import { [32mPERSONAL_PROJECT_ID[37m } from './projects';
+           ╵          [32m~~~~~~~~~~~~~~~~~~~[0m
+  
+  
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mBuild failed with 1 error:[0m
+
+  [31mX [41;31m[[41;97mERROR[41;31m][0m [1mNo matching export in "src/n8n/projects.ts" for import "PERSONAL_PROJECT_ID"[0m
+  
+      src/n8n/workflows.ts:10:9:
+  [37m      10 │ import { [32mPERSONAL_PROJECT_ID[37m } from './projects';
+           ╵          [32m~~~~~~~~~~~~~~~~~~~[0m
+  
+  
+
+
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+[wrangler:info] GET /rest/login 401 Unauthorized (70ms)
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+[33m▲ [43;33m[[43;30mWARNING[43;33m][0m [1mProxyWorker: GET http://dummy/cdn-cgi/ProxyWorker/pause recovered on attempt 2 after a dropped connection to the UserWorker[0m
+
+
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+⎔ Reloading local server...
+⎔ Local server updated and ready
+[wrangler:warn] The Workers runtime crashed unexpectedly and is being restarted (crash #1). Any additional runtime output above may indicate the cause.

@@ -1,0 +1,170 @@
+TAP version 13
+# Subtest: Code：箭头函数 + items.map + 对象展开 → 产出正确值（P0 缺陷1 核心回归）
+ok 1 - Code：箭头函数 + items.map + 对象展开 → 产出正确值（P0 缺陷1 核心回归）
+  ---
+  duration_ms: 15.863
+  type: 'test'
+  ...
+# Subtest: Code：items.map 不展开也应产出正确值（复测脚本 A 段写法）
+ok 2 - Code：items.map 不展开也应产出正确值（复测脚本 A 段写法）
+  ---
+  duration_ms: 1.2025
+  type: 'test'
+  ...
+# Subtest: Code：return items 原样透传
+ok 3 - Code：return items 原样透传
+  ---
+  duration_ms: 0.803
+  type: 'test'
+  ...
+# Subtest: Code：return $json（面板默认值）保持可用
+ok 4 - Code：return $json（面板默认值）保持可用
+  ---
+  duration_ms: 0.9296
+  type: 'test'
+  ...
+# Subtest: Code：$input.all() / first() / last() 语义正确
+ok 5 - Code：$input.all() / first() / last() 语义正确
+  ---
+  duration_ms: 1.4577
+  type: 'test'
+  ...
+# Subtest: Code：.filter / .reduce / .forEach / .length 与两种 lambda 写法
+ok 6 - Code：.filter / .reduce / .forEach / .length 与两种 lambda 写法
+  ---
+  duration_ms: 2.4227
+  type: 'test'
+  ...
+# Subtest: Code：常量声明 + return（保持既有能力）
+ok 7 - Code：常量声明 + return（保持既有能力）
+  ---
+  duration_ms: 3.6608
+  type: 'test'
+  ...
+# Subtest: Code：不支持的语法（块体箭头）→ 节点 failed 且 error_message 非空
+ok 8 - Code：不支持的语法（块体箭头）→ 节点 failed 且 error_message 非空
+  ---
+  duration_ms: 2.7789
+  type: 'test'
+  ...
+# Subtest: Code：不支持的语句（for 循环）→ 节点 failed 且错误可读
+ok 9 - Code：不支持的语句（for 循环）→ 节点 failed 且错误可读
+  ---
+  duration_ms: 2.1729
+  type: 'test'
+  ...
+# Subtest: Code：未闭合括号等语法错误 → 显式失败
+ok 10 - Code：未闭合括号等语法错误 → 显式失败
+  ---
+  duration_ms: 1.8092
+  type: 'test'
+  ...
+# Subtest: Code：未知函数调用 → 显式失败（回归：__codeError 曾被改写为 output 数据）
+ok 11 - Code：未知函数调用 → 显式失败（回归：__codeError 曾被改写为 output 数据）
+  ---
+  duration_ms: 0.714
+  type: 'test'
+  ...
+# Subtest: Code：错误信息指出受限求值器的能力边界（可行动）
+ok 12 - Code：错误信息指出受限求值器的能力边界（可行动）
+  ---
+  duration_ms: 0.573
+  type: 'test'
+  ...
+# Subtest: Code：json.items 是成员访问，不是内置 items（3 输入应产出 3 项）
+ok 13 - Code：json.items 是成员访问，不是内置 items（3 输入应产出 3 项）
+  ---
+  duration_ms: 0.5751
+  type: 'test'
+  ...
+# Subtest: Code：json.items 标量值也逐项处理（2 输入应产出 2 项）
+ok 14 - Code：json.items 标量值也逐项处理（2 输入应产出 2 项）
+  ---
+  duration_ms: 0.3971
+  type: 'test'
+  ...
+# Subtest: Code：对象键 items 不是内置引用（2 输入应产出 2 项）
+ok 15 - Code：对象键 items 不是内置引用（2 输入应产出 2 项）
+  ---
+  duration_ms: 0.4918
+  type: 'test'
+  ...
+# Subtest: Code：字符串内的 items 不是内置引用（2 输入应产出 2 项）
+ok 16 - Code：字符串内的 items 不是内置引用（2 输入应产出 2 项）
+  ---
+  duration_ms: 0.7829
+  type: 'test'
+  ...
+# Subtest: Code：对照——真正引用内置 items 仍走整批执行
+ok 17 - Code：对照——真正引用内置 items 仍走整批执行
+  ---
+  duration_ms: 2.127
+  type: 'test'
+  ...
+# Subtest: Code：真正在对象值位置引用 items 仍走整批执行
+ok 18 - Code：真正在对象值位置引用 items 仍走整批执行
+  ---
+  duration_ms: 3.3987
+  type: 'test'
+  ...
+# Subtest: Code：展开运算符后的 $input 仍识别为内置引用（`...` 不得被当作成员访问的 `.`）
+ok 19 - Code：展开运算符后的 $input 仍识别为内置引用（`...` 不得被当作成员访问的 `.`）
+  ---
+  duration_ms: 1.1281
+  type: 'test'
+  ...
+# Subtest: Code：逐项模式返回数据项数组 → 展开为多项（[1,2,3].map... 应产出 3 项）
+ok 20 - Code：逐项模式返回数据项数组 → 展开为多项（[1,2,3].map... 应产出 3 项）
+  ---
+  duration_ms: 1.0688
+  type: 'test'
+  ...
+# Subtest: Code：逐项模式返回数据项数组字面量 → 展开为多项
+ok 21 - Code：逐项模式返回数据项数组字面量 → 展开为多项
+  ---
+  duration_ms: 0.8496
+  type: 'test'
+  ...
+# Subtest: Code：逐项模式返回空数组 → 不丢项（并入 output: []，而非误判数据项数组展开为 0 项）
+not ok 22 - Code：逐项模式返回空数组 → 不丢项（并入 output: []，而非误判数据项数组展开为 0 项）
+  ---
+  duration_ms: 15.6549
+  type: 'test'
+  location: 'F:\\Documents\\GitHub\\mini-flow\\tests\\unit\\code-node.test.ts:1:8386'
+  failureType: 'testCodeFailure'
+  error: |-
+    空数组不得被当作数据项数组（vacuous truth）展开而丢光输入
+    
+    0 !== 2
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 2
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (F:\Documents\GitHub\mini-flow\tests\unit\code-node.test.ts:206:10)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: Code：逐项模式标量 / 字段数组值仍维持历史（并入 output，不炸成多项）
+ok 23 - Code：逐项模式标量 / 字段数组值仍维持历史（并入 output，不炸成多项）
+  ---
+  duration_ms: 1.2991
+  type: 'test'
+  ...
+# Subtest: Code：对象简写属性不支持 → 显式失败且错误提示正确写法
+ok 24 - Code：对象简写属性不支持 → 显式失败且错误提示正确写法
+  ---
+  duration_ms: 0.641
+  type: 'test'
+  ...
+1..24
+# tests 24
+# suites 0
+# pass 23
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 131.1684

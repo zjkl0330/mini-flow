@@ -1,0 +1,247 @@
+=== transform.ts diff ===
+commit f4f7fb1a13dbcc4b5faf883a8ff63f961e6fb624
+Author: zjkl <827802685@qq.com>
+Date:   Sun Sep 20 20:04:41 2026 +0800
+
+    fix(params): 修复节点参数与执行器读取键错配(renameKeys/aggregate/editFields/assign/dateTime)并收口死控件
+
+diff --git a/src/nodes/transform.ts b/src/nodes/transform.ts
+index 9d11d3e..95c076f 100644
+--- a/src/nodes/transform.ts
++++ b/src/nodes/transform.ts
+@@ -3,6 +3,7 @@
+ // Filter / Sort / Aggregate / Math / DateTime / ExtractFromJson / EditFields(Set多字段) / Convert协信。
+ // 命名统一 node.xxx 前缀匹配 n8n 参数形态，worker 受限环境下保持确定性、幂等实现。
+ import type { NodeExecutionContext } from '../types';
++import { asJsonArray, asJsonRecord } from './common';
+ 
+ type Item = { json: Record<string, any> };
+ type NodeOutput = Record<string, Item[]>;
+@@ -85,7 +86,8 @@ export const aggregateNode = {
+   async execute(ctx: NodeExecutionContext): Promise<NodeOutput> {
+     const p = ctx.node.parameters ?? {};
+     const items = ctx.inputData?.main ?? [];
+-    const fields = Array.isArray(p.fields) ? p.fields : (p.aggregation?.fields ?? []);
++    // `fields` 为 json 型参数（编辑器值为字符串），需容错解析为数组；兼容 p.fields / p.aggregation.fields 两种落点。
++    const fields = (asJsonArray(p.fields) ?? asJsonArray(p.aggregation?.fields) ?? []) as any[];
+     const groupEntry = fields.find((f: any) => f.grouping);
+     const groupField = groupEntry ? String(groupEntry.field ?? '') : '';
+     const groups: Record<string, Item[]> = {};
+@@ -207,7 +209,11 @@ export const dateTimeNode = {
+       const j = it.json ?? {};
+       const base = p.dateProperty ? new Date(String(getPath(j, p.dateProperty) ?? Date.now())) : new Date();
+       if (isNaN(base.getTime())) return { json: j };
+-      const addT = p.additionalFields?.add ?? {};
++      // `additionalFields` 为 collection、内层 `add` 为 json 型（编辑器值为字符串），需容错解析为对象。
++      const additionalFields = (typeof p.additionalFields === 'string'
++        ? asJsonRecord(p.additionalFields)
++        : (p.additionalFields as Record<string, unknown> | undefined)) ?? {};
++      const addT = (asJsonRecord(additionalFields.add) ?? {}) as Record<string, any>;
+       const target = new Date(base);
+       const amt = num(addT.value ?? 0);
+       if (amt) {
+@@ -249,11 +255,12 @@ export const editFieldsNode = {
+   async execute(ctx: NodeExecutionContext): Promise<NodeOutput> {
+     const p = ctx.node.parameters ?? {};
+     const items = ctx.inputData?.main ?? [];
+-    const fields = p.fields ?? p.assignments ?? [];
++    // `fields` 为 json 型参数（编辑器值为字符串），需容错解析为数组。
++    const fields = (asJsonArray(p.fields) ?? asJsonArray(p.assignments) ?? []) as any[];
+     const mode = p.mode ?? (p.fields ? 'merge' : 'set');
+     const out = items.map((it) => {
+-      let j = { ...(it.json ?? {}) };
+-      for (const f of (fields as any[])) {
++      const j = { ...(it.json ?? {}) };
++      for (const f of fields) {
+         const key = f.name ?? f.field;
+         if (!key) continue;
+         if (mode === 'set') j[key] = keepVal(f.value, j);
+
+=== if-condition.ts diff ===
+commit f4f7fb1a13dbcc4b5faf883a8ff63f961e6fb624
+Author: zjkl <827802685@qq.com>
+Date:   Sun Sep 20 20:04:41 2026 +0800
+
+    fix(params): 修复节点参数与执行器读取键错配(renameKeys/aggregate/editFields/assign/dateTime)并收口死控件
+
+diff --git a/src/nodes/if-condition.ts b/src/nodes/if-condition.ts
+index a37f5b8..99f1793 100644
+--- a/src/nodes/if-condition.ts
++++ b/src/nodes/if-condition.ts
+@@ -5,15 +5,18 @@ import { safeEvaluate } from '../engine/evaluator';
+ // ---- Set：写入字段（对全部输入项生效，兼容 n8n 参数形态） ----
+ export const setNode = {
+   async execute(ctx: NodeExecutionContext) {
+-    const p = ctx.node.parameters;
++    const p = ctx.node.parameters ?? {};
+     const items = ctx.inputData?.main ?? [];
+     // n8n Set 对每个输入项各写一份；无输入项时产出空项保持端点非空。
+     const sources = items.length ? items : [{ json: {} }];
++    // keepOnlySet=true：仅保留本节点写入的字段，丢弃上游输入字段（n8n「Keep Only Set Fields」语义）。
++    const keepOnlySet = Boolean(p.keepOnlySet ?? p.options?.keepOnlySet ?? false);
+     const out = sources.map((it) => {
+-      const item = { ...(it.json ?? {}) };
++      const src = it.json ?? {};
++      const item: Record<string, any> = keepOnlySet ? {} : { ...src };
+       if (p.assignments) {
+         for (const a of p.assignments.assignments ?? []) {
+-          item[String(a.name)] = interpKeepType(a.value, it.json ?? {});
++          item[String(a.name)] = interpKeepType(a.value, src);
+         }
+       } else if (p.name !== undefined) {
+         item[String(p.name)] = interpKeepType(p.value, item);
+
+=== logic.ts diff ===
+commit f4f7fb1a13dbcc4b5faf883a8ff63f961e6fb624
+Author: zjkl <827802685@qq.com>
+Date:   Sun Sep 20 20:04:41 2026 +0800
+
+    fix(params): 修复节点参数与执行器读取键错配(renameKeys/aggregate/editFields/assign/dateTime)并收口死控件
+
+diff --git a/src/nodes/logic.ts b/src/nodes/logic.ts
+index ce957f9..4bb6a88 100644
+--- a/src/nodes/logic.ts
++++ b/src/nodes/logic.ts
+@@ -55,11 +55,24 @@ export const errorTriggerNode = {
+   },
+ };
+ 
+-// ---- Respond to Webhook：把输入作响应体回显，便于手动运行拿到输出 ----
++// ---- Respond to Webhook：把输入作响应体回显 —— 按 respondWith 决定回包形态 ----
++// respondWith: 'allIncomingItems'(默认) / 'json' → 输入原样回显（webhook.ts 以 application/json 回包）；
++//              'text' → 取首个输入项的文本（字符串或 .text 字段），webhook.ts 以 text/plain 回包。
+ export const respondToWebhookNode = {
+   async execute(ctx: NodeExecutionContext): Promise<NodeOutput> {
++    const p = ctx.node.parameters ?? {};
++    const items = ctx.inputData?.main ?? [];
++    if (String(p.respondWith ?? 'allIncomingItems') === 'text') {
++      const first = items[0]?.json;
++      const text = typeof first === 'string'
++        ? first
++        : (first && typeof first === 'object' && typeof (first as { text?: unknown }).text === 'string')
++          ? String((first as { text: unknown }).text)
++          : (first == null ? '' : JSON.stringify(first));
++      return { main: [{ json: { text } }] };
++    }
+     return {
+-      main: ctx.inputData?.main?.length ? [...ctx.inputData.main] : [{ json: { responseMode: 'onReceived' } }],
++      main: items.length ? [...items] : [{ json: { responseMode: 'onReceived' } }],
+     };
+   },
+ };
+
+=== webhook.ts diff ===
+commit f4f7fb1a13dbcc4b5faf883a8ff63f961e6fb624
+Author: zjkl <827802685@qq.com>
+Date:   Sun Sep 20 20:04:41 2026 +0800
+
+    fix(params): 修复节点参数与执行器读取键错配(renameKeys/aggregate/editFields/assign/dateTime)并收口死控件
+
+diff --git a/src/n8n/webhook.ts b/src/n8n/webhook.ts
+index 8ec9aa2..b2558b3 100644
+--- a/src/n8n/webhook.ts
++++ b/src/n8n/webhook.ts
+@@ -121,14 +121,14 @@ export function flattenNodeOutput(outputData: string | null): unknown {
+   return parsed;
+ }
+ 
+-// 轮询执行终态，取回包节点输出与状态码（responseNode / lastNode）。
++// 轮询执行终态，取回包节点输出、状态码与回包形态（responseNode / lastNode）。
+ // 超时或无法取到 → 返回 null（调用方回退 200 {"message":"Workflow was started"}）。
+ export async function waitForExecutionResponse(
+   env: Env,
+   executionId: string,
+   mode: ResponseMode,
+   timeoutMs: number = DEFAULT_TIMEOUT_MS,
+-): Promise<{ statusCode: number; body: unknown } | null> {
++): Promise<{ statusCode: number; body: unknown; respondWith: string } | null> {
+   const deadline = Date.now() + timeoutMs;
+   while (Date.now() < deadline) {
+     const row = await env.DB.prepare(
+@@ -143,28 +143,37 @@ export async function waitForExecutionResponse(
+       const chosen = mode === 'responseNode'
+         ? ([...results].reverse().find((r) => isRespondToWebhookType(r.node_type)) ?? results[results.length - 1])
+         : results[results.length - 1];
+-      const statusCode = await resolveResponseCode(env, row.workflow_id, chosen?.node_name);
++      const meta = await resolveRespondMeta(env, row.workflow_id, chosen?.node_name);
+       const body = flattenNodeOutput(chosen?.output_data ?? null);
+-      return { statusCode, body };
++      return { statusCode: meta.statusCode, body, respondWith: meta.respondWith };
+     }
+     await new Promise((r) => setTimeout(r, POLL_MS));
+   }
+   return null;
+ }
+ 
+-// 状态码来源：respondToWebhook 节点的 parameters.responseCode，缺省 200。
+-async function resolveResponseCode(env: Env, workflowId: string, nodeName: string | undefined): Promise<number> {
+-  if (!nodeName) return 200;
++// 回包元数据来源：respondToWebhook 节点的 parameters.responseCode / responseWith，缺省 { 200, 'json' }。
++interface RespondMeta { statusCode: number; respondWith: string; }
++
++async function resolveRespondMeta(env: Env, workflowId: string, nodeName: string | undefined): Promise<RespondMeta> {
++  const fallback: RespondMeta = { statusCode: 200, respondWith: 'json' };
++  if (!nodeName) return fallback;
+   try {
+     const row = await env.DB.prepare('SELECT nodes FROM workflows WHERE id=?')
+       .bind(workflowId).first<{ nodes: string }>();
+-    if (!row?.nodes) return 200;
++    if (!row?.nodes) return fallback;
+     const nodes = JSON.parse(row.nodes) as N8nNode[];
+     const node = nodes.find((n) => n.name === nodeName && isRespondToWebhookType(n.type ?? ''));
+-    const code = Number(node?.parameters?.responseCode);
+-    return Number.isFinite(code) && code >= 100 && code <= 599 ? code : 200;
++    if (!node) return fallback;
++    const code = Number(node.parameters?.responseCode);
++    // respondWith='text' → 调用方以 text/plain 回包；其余（allIncomingItems/json）按 JSON 回包。
++    const respondWith = String(node.parameters?.respondWith ?? '') === 'text' ? 'text' : 'json';
++    return {
++      statusCode: Number.isFinite(code) && code >= 100 && code <= 599 ? code : 200,
++      respondWith,
++    };
+   } catch {
+-    return 200;
++    return fallback;
+   }
+ }
+ 
+@@ -234,6 +243,14 @@ export async function handleWebhookRequest(
+     // 超时/未完成 → 回落 onReceived（不返回 504，避免外部调用方把「已触发」误判为失败）
+     return c.json({ message: 'Workflow was started' }, 200);
+   }
++  // respondWith='text'：以 text/plain 回纯文本（取回包体的 .text 字段，否则整体字符串化）。
++  if (resp.respondWith === 'text') {
++    const b = resp.body as { text?: unknown } | string | null;
++    const text = (b && typeof b === 'object' && typeof b.text === 'string')
++      ? b.text
++      : (typeof b === 'string' ? b : (b == null ? '' : JSON.stringify(b)));
++    return new Response(text, { status: resp.statusCode, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
++  }
+   return new Response(typeof resp.body === 'string' ? resp.body : JSON.stringify(resp.body), {
+     status: resp.statusCode,
+     headers: { 'Content-Type': 'application/json' },
+
+=== tags.ts diff ===
+commit f4f7fb1a13dbcc4b5faf883a8ff63f961e6fb624
+Author: zjkl <827802685@qq.com>
+Date:   Sun Sep 20 20:04:41 2026 +0800
+
+    fix(params): 修复节点参数与执行器读取键错配(renameKeys/aggregate/editFields/assign/dateTime)并收口死控件
+
+diff --git a/src/n8n/tags.ts b/src/n8n/tags.ts
+index 041c2e8..6700ae0 100644
+--- a/src/n8n/tags.ts
++++ b/src/n8n/tags.ts
+@@ -48,9 +48,11 @@ export const tagRoutes = new Hono<{ Bindings: Env }>()
+     const updated = await withRetry(() => c.env.DB.prepare('SELECT * FROM tags WHERE id=?').bind(id).first<TagRow>());
+     return c.json({ data: toTag(updated as TagRow) });
+   })
+-  // 删除（级联删关联）
++  // 删除（级联删关联）；不存在的 id → 404，与 community-nodes/:name/uninstall 语义统一
+   .delete('/:id', async (c) => {
+     const id = c.req.param('id');
++    const row = await withRetry(() => c.env.DB.prepare('SELECT id FROM tags WHERE id=?').bind(id).first<{ id: string }>());
++    if (!row) return c.json({ code: 404, message: 'Tag not found', data: undefined }, 404);
+     await withRetry(() => c.env.DB.batch([
+       c.env.DB.prepare('DELETE FROM workflow_tags WHERE tag_id=?').bind(id),
+       c.env.DB.prepare('DELETE FROM tags WHERE id=?').bind(id),

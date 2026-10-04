@@ -1,0 +1,5 @@
+== git status ==
+== HEAD ==
+95f266e test(qa): 锁死 F3 逆向护栏——整批 return [] 语义与逐项输出数恒等输入数
+f496b6a test(qa): 补 F3 回归——逐项模式 return [] 不丢项
+7cc5c2c fix(code): 逐项模式空数组 [] 不再被 every 误判为数据项数组而丢项（QA F3）

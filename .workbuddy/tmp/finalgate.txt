@@ -1,0 +1,8 @@
+=== final gate ===
+ℹ tests 111
+ℹ pass 111
+ℹ fail 0
+=== tsc ===
+tsc_exit=0
+=== git diff --stat (must be empty) ===
+=== git status ===

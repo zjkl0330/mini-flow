@@ -1,0 +1,6 @@
+=== tsc ===
+tsc_exit=0
+=== tests ===
+ℹ tests 111
+ℹ pass 111
+ℹ fail 0

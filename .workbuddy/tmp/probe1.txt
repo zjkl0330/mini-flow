@@ -1,0 +1,7 @@
+f4f7fb1 fix(params): 修复节点参数与执行器读取键错配(renameKeys/aggregate/editFields/assign/dateTime)并收口死控件
+30c2af1 docs: 增量 PRD 与增量设计
+8f0d654 feat(increment): 外部触发(webhook/form)+REST能力端点+节点可配置化 (REQ-11,14,15,16,17,26,27,29,31,32)
+e0681b8 fix(auth/engine/rest): 鉴权墙+HMAC会话+执行引擎语义+REST契约 修复，并建立 node:test 回归套件
+31dec73 fix(win): 重命名 src/n8n/aux.ts -> auxiliary.ts，规避 Windows 保留设备名导致无法 clone
+6d60dd1 fix(evaluator): 对象字面量冒号解析修复; 括号/数组结果支持链式成员访问
+---STATUS---
